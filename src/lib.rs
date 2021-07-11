@@ -41,7 +41,7 @@ mod tests {
     #[test]
     fn contains() {
         let octree = Octree::<u8>::new(NonZeroU32::new(32).unwrap()).unwrap();
-        
+
         assert!(octree.contains(vector![16, 29, 7]));
         assert!(!octree.contains(vector![16, 29, 33]));
     }

@@ -1,6 +1,6 @@
 use crate::Node;
 
-use nalgebra::{Vector3, vector};
+use nalgebra::{vector, Vector3};
 
 use std::{fmt::Debug, num::NonZeroU32};
 

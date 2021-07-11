@@ -1,4 +1,4 @@
-use nalgebra::{Vector3, vector};
+use nalgebra::{vector, Vector3};
 
 use std::{fmt::Debug, ops::Deref};
 
@@ -9,42 +9,58 @@ const BOUNDS_LEN: usize = 2;
 #[repr(usize)]
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Octant {
-    LeftRearBase   = 0,
-    RightRearBase  = 1,
-    LeftRearTop    = 2,
-    RightRearTop   = 3,
-    LeftFrontBase  = 4,
+    LeftRearBase = 0,
+    RightRearBase = 1,
+    LeftRearTop = 2,
+    RightRearTop = 3,
+    LeftFrontBase = 4,
     RightFrontBase = 5,
-    LeftFrontTop   = 6,
-    RightFrontTop  = 7,
+    LeftFrontTop = 6,
+    RightFrontTop = 7,
 }
 
 impl Octant {
     fn offset(&self) -> Vector3<u32> {
         match self {
-            Self::LeftRearBase   => vector![0, 0, 0],
-            Self::RightRearBase  => vector![1, 0, 0],
-            Self::LeftRearTop    => vector![0, 0, 1],
-            Self::RightRearTop   => vector![1, 0, 1],
-            Self::LeftFrontBase  => vector![0, 1, 0],
+            Self::LeftRearBase => vector![0, 0, 0],
+            Self::RightRearBase => vector![1, 0, 0],
+            Self::LeftRearTop => vector![0, 0, 1],
+            Self::RightRearTop => vector![1, 0, 1],
+            Self::LeftFrontBase => vector![0, 1, 0],
             Self::RightFrontBase => vector![1, 1, 0],
-            Self::LeftFrontTop   => vector![0, 1, 1],
-            Self::RightFrontTop  => vector![1, 1, 1],
+            Self::LeftFrontTop => vector![0, 1, 1],
+            Self::RightFrontTop => vector![1, 1, 1],
         }
     }
 
     fn vector_diff(rhs: Vector3<u32>, lhs: Vector3<u32>) -> Self {
         if lhs.z < rhs.z {
             if lhs.y < rhs.y {
-                if lhs.x < rhs.x { Self::LeftRearBase  } else { Self::RightRearBase  }
+                if lhs.x < rhs.x {
+                    Self::LeftRearBase
+                } else {
+                    Self::RightRearBase
+                }
             } else {
-                if lhs.x < rhs.x { Self::LeftFrontBase } else { Self::RightFrontBase }
+                if lhs.x < rhs.x {
+                    Self::LeftFrontBase
+                } else {
+                    Self::RightFrontBase
+                }
             }
         } else {
             if lhs.y < rhs.y {
-                if lhs.x < rhs.x { Self::LeftRearTop  } else { Self::RightRearTop  }
+                if lhs.x < rhs.x {
+                    Self::LeftRearTop
+                } else {
+                    Self::RightRearTop
+                }
             } else {
-                if lhs.x < rhs.x { Self::LeftFrontTop } else { Self::RightFrontTop }
+                if lhs.x < rhs.x {
+                    Self::LeftFrontTop
+                } else {
+                    Self::RightFrontTop
+                }
             }
         }
     }
@@ -103,7 +119,7 @@ impl<T: Debug + Default> Node<T> {
             }
 
             return Ok(());
-        } 
+        }
 
         Err(())
     }
@@ -142,9 +158,12 @@ impl<T: Debug + Default> Node<T> {
 
     /// Returns whether the `Node` contains the given position.
     pub fn contains(&self, position: Vector3<u32>) -> bool {
-        position.x >= self.bounds[0].x && position.x < self.bounds[1].x
-            && position.y >= self.bounds[0].y && position.y < self.bounds[1].y
-            && position.z >= self.bounds[0].z && position.z < self.bounds[1].z
+        position.x >= self.bounds[0].x
+            && position.x < self.bounds[1].x
+            && position.y >= self.bounds[0].y
+            && position.y < self.bounds[1].y
+            && position.z >= self.bounds[0].z
+            && position.z < self.bounds[1].z
     }
 
     fn is_leaf(&self) -> bool {
