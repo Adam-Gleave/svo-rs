@@ -2,7 +2,8 @@ use crate::Node;
 
 use nalgebra::{vector, Vector3};
 
-use std::{fmt::Debug, num::NonZeroU32};
+use alloc::boxed::Box;
+use core::{fmt::Debug, num::NonZeroU32};
 
 #[derive(Debug)]
 pub struct Octree<T> {

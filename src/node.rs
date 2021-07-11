@@ -1,6 +1,7 @@
 use nalgebra::{vector, Vector3};
 
-use std::{fmt::Debug, ops::Deref};
+use alloc::boxed::Box;
+use core::{fmt::Debug, ops::Deref};
 
 pub(crate) const OCTREE_CHILDREN: usize = 8;
 

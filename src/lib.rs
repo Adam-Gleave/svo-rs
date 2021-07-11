@@ -1,4 +1,7 @@
+#![no_std]
 #![allow(dead_code)]
+
+extern crate alloc;
 
 mod node;
 mod octree;
@@ -13,7 +16,7 @@ mod tests {
 
     use nalgebra::vector;
 
-    use std::num::NonZeroU32;
+    use core::num::NonZeroU32;
 
     #[test]
     fn new_valid() {
