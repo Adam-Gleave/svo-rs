@@ -1,0 +1,7 @@
+[package]
+name = "svo-rs"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+nalgebra = "0.27"
