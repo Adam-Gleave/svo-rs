@@ -1,4 +1,4 @@
-use crate::Node;
+use crate::{Error, Node};
 
 use nalgebra::{vector, Vector3};
 
@@ -10,10 +10,10 @@ pub struct Octree<T> {
     root: Box<Node<T>>,
 }
 
-impl<T: Debug + Default> Octree<T> {
+impl<T: Debug + Default + Eq + PartialEq + Clone> Octree<T> {
     /// Creates a new `Octree<T>` of given dimension.
     /// Returns an error if the dimension is 0
-    pub fn new(dimension: NonZeroU32) -> Result<Self, ()> {
+    pub fn new(dimension: NonZeroU32) -> Result<Self, Error> {
         // Check that `dimension` is a power of 2.
         if (dimension.get() as f32).log(2.0).fract() == 0.0 {
             return Ok(Self {
@@ -24,12 +24,12 @@ impl<T: Debug + Default> Octree<T> {
             });
         }
 
-        Err(())
+        Err(Error::InvalidDimension(dimension))
     }
 
     /// Inserts data of type `T` into the given position in the `Octree`.
     /// Returns an error if the position does not exist within the confines of the `Octree`.
-    pub fn insert(&mut self, position: Vector3<u32>, data: T) -> Result<(), ()> {
+    pub fn insert(&mut self, position: Vector3<u32>, data: T) -> Result<(), Error> {
         self.root.insert(position, data)
     }
 

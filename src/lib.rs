@@ -3,9 +3,15 @@
 
 extern crate alloc;
 
+#[cfg(test)]
+#[macro_use]
+extern crate std;
+
+mod error;
 mod node;
 mod octree;
 
+pub use error::Error;
 pub use octree::Octree;
 
 pub(crate) use node::Node;

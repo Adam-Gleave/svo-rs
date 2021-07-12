@@ -1,3 +1,5 @@
+use crate::Error;
+
 use nalgebra::{vector, Vector3};
 
 use alloc::boxed::Box;
@@ -8,7 +10,7 @@ pub(crate) const OCTREE_CHILDREN: usize = 8;
 const BOUNDS_LEN: usize = 2;
 
 #[repr(usize)]
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Octant {
     LeftRearBase = 0,
     RightRearBase = 1,
@@ -79,14 +81,14 @@ impl<T> Default for NodeType<T> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct Node<T> {
     ty: NodeType<T>,
     bounds: [Vector3<u32>; BOUNDS_LEN],
     children: [Box<Option<Node<T>>>; OCTREE_CHILDREN],
 }
 
-impl<T: Debug + Default> Node<T> {
+impl<T: Debug + Default + Eq + PartialEq + Clone> Node<T> {
     /// Creates a new `Node<T>` with the given bounds.
     pub(crate) fn new(bounds: [Vector3<u32>; BOUNDS_LEN]) -> Self {
         Self {
@@ -97,7 +99,7 @@ impl<T: Debug + Default> Node<T> {
     }
 
     /// Inserts a new leaf `Node` at the given position, if possible.
-    pub fn insert(&mut self, position: Vector3<u32>, data: T) -> Result<(), ()> {
+    pub(crate) fn insert(&mut self, position: Vector3<u32>, data: T) -> Result<(), Error> {
         if self.contains(position) {
             if self.dimension() == 1 {
                 self.ty = NodeType::Leaf(data);
@@ -113,20 +115,26 @@ impl<T: Debug + Default> Node<T> {
                 let upper = lower + dimension_3d;
                 let bounds = [lower, upper];
 
-                let mut node = Node::<T>::new(bounds);
+                let mut node = if self.children[octant as usize].as_ref().is_some() {
+                    self.children[octant as usize].take().unwrap()
+                } else {
+                    Node::<T>::new(bounds)
+                };
+
                 node.insert(position, data).unwrap();
 
                 self.children[octant as usize] = Box::new(Some(node));
             }
 
+            self.simplify();
             return Ok(());
         }
 
-        Err(())
+        Err(Error::InvalidPosition(position))
     }
 
     /// Gets data from a `Node` at the given position, if possible.
-    pub fn get(&self, position: Vector3<u32>) -> Option<&T> {
+    pub(crate) fn get(&self, position: Vector3<u32>) -> Option<&T> {
         if self.contains(position) {
             return match &self.ty {
                 NodeType::Leaf(data) => Some(data),
@@ -147,18 +155,45 @@ impl<T: Debug + Default> Node<T> {
         None
     }
 
+    /// Simplifies the `Node`.
+    ///
+    /// If all children are leaf `Node`s with identical data, destroy all children, 
+    /// and mark the `Node` as a leaf containing that data.
+    pub(crate) fn simplify(&mut self) {
+        let mut data = None;
+
+        for i in 0..OCTREE_CHILDREN {
+            if let Some(child) = self.children[i].deref() {
+                if child.is_leaf() {
+                    let leaf_data = child.leaf_data();
+
+                    if leaf_data.is_none() {
+                        return;
+                    } else if data.as_ref().is_none() {
+                        data = leaf_data;
+                    } else if *data.as_ref().unwrap() != leaf_data.unwrap() {
+                        return;
+                    }
+                }
+            } else {
+                return;
+            }
+        }
+
+        self.ty = NodeType::Leaf((*data.unwrap()).clone());
+
+        for i in 0..OCTREE_CHILDREN {
+            *self.children[i] = None;
+        }
+    }
+
     /// Returns the dimension of the `Node`.
-    pub fn dimension(&self) -> u32 {
+    pub(crate) fn dimension(&self) -> u32 {
         (self.bounds[0].x as i32 - self.bounds[1].x as i32).abs() as u32
     }
 
-    /// Returns the position at the minimum point of the `Node`.
-    pub fn min_position(&self) -> Vector3<u32> {
-        self.bounds[0]
-    }
-
     /// Returns whether the `Node` contains the given position.
-    pub fn contains(&self, position: Vector3<u32>) -> bool {
+    pub(crate) fn contains(&self, position: Vector3<u32>) -> bool {
         position.x >= self.bounds[0].x
             && position.x < self.bounds[1].x
             && position.y >= self.bounds[0].y
@@ -167,10 +202,19 @@ impl<T: Debug + Default> Node<T> {
             && position.z < self.bounds[1].z
     }
 
-    fn is_leaf(&self) -> bool {
-        match self.ty {
-            NodeType::Leaf(_) => true,
-            _ => false,
+    /// Get leaf data from this `Node`.
+    pub(crate) fn leaf_data(&self) -> Option<&T> {
+        match &self.ty {
+            NodeType::Leaf(data) => Some(&data),
+            _ => None,
         }
+    }
+
+    fn min_position(&self) -> Vector3<u32> {
+        self.bounds[0]
+    }
+
+    fn is_leaf(&self) -> bool {
+        matches!(self.ty, NodeType::Leaf(_))
     }
 }
