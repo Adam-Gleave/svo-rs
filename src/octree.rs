@@ -7,7 +7,7 @@ use core::{fmt::Debug, num::NonZeroU32};
 
 #[derive(Debug)]
 pub struct Octree<T> {
-    auto_simplify: bool,
+    dimension: NonZeroU32,
     root: Box<Node<T>>,
 }
 
@@ -18,7 +18,7 @@ impl<T: Debug + Default + Eq + PartialEq + Clone> Octree<T> {
         // Check that `dimension` is a power of 2.
         if (dimension.get() as f32).log(2.0).fract() == 0.0 {
             return Ok(Self {
-                auto_simplify: false,
+                dimension,
                 root: Box::new(Node::<T>::new([
                     vector![0, 0, 0],
                     vector![dimension.get(), dimension.get(), dimension.get()],
@@ -29,16 +29,10 @@ impl<T: Debug + Default + Eq + PartialEq + Clone> Octree<T> {
         Err(Error::InvalidDimension(dimension))
     }
 
-    /// Automatically simplify the `Octree` when possible.
-    pub fn with_auto_simplify(mut self, enabled: bool) -> Self {
-        self.auto_simplify = enabled;
-        self
-    }
-
     /// Inserts data of type `T` into the given position in the `Octree`.
     /// Returns an error if the position does not exist within the confines of the `Octree`.
     pub fn insert(&mut self, position: Vector3<u32>, data: T) -> Result<(), Error> {
-        self.root.insert(position, data, self.auto_simplify)
+        self.root.insert(position, data)
     }
 
     /// Retrieves data of type `T` from the given position in the `Octree`.
@@ -47,9 +41,18 @@ impl<T: Debug + Default + Eq + PartialEq + Clone> Octree<T> {
         self.root.get(position)
     }
 
-    /// Attempt to simplify the `Octree` where possible.
-    pub fn simplify(&mut self) {
-        self.root.simplify()
+    /// Removes the `Node` at the given position in the `Octree`, if it exists.
+    /// This will simplify the `Octree` if `auto_simplify` is specified.
+    pub fn clear_at(&mut self, position: Vector3<u32>) -> Result<(), Error> {
+        self.root.clear(position)
+    }
+
+    /// Removes all `Node`s from the `Octree`.
+    pub fn clear(&mut self) {
+        self.root = Box::new(Node::<T>::new([
+            vector![0, 0, 0],
+            vector![self.dimension.get(), self.dimension.get(), self.dimension.get()],
+        ]));
     }
 
     /// Returns the dimension of the root node.

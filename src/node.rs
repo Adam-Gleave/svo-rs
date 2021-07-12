@@ -73,6 +73,7 @@ impl Octant {
 pub(crate) enum NodeType<T> {
     Leaf(T),
     Internal,
+    Simplified,
 }
 
 impl<T> Default for NodeType<T> {
@@ -99,7 +100,7 @@ impl<T: Debug + Default + Eq + PartialEq + Clone> Node<T> {
     }
 
     /// Inserts a new leaf `Node` at the given position, if possible.
-    pub(crate) fn insert(&mut self, position: Vector3<u32>, data: T, simplify: bool) -> Result<(), Error> {
+    pub(crate) fn insert(&mut self, position: Vector3<u32>, data: T) -> Result<(), Error> {
         if self.contains(position) {
             if self.dimension() == 1 {
                 self.ty = NodeType::Leaf(data);
@@ -121,15 +122,44 @@ impl<T: Debug + Default + Eq + PartialEq + Clone> Node<T> {
                     Node::<T>::new(bounds)
                 };
 
-                node.insert(position, data, simplify).unwrap();
+                node.insert(position, data).unwrap();
 
                 self.children[octant as usize] = Box::new(Some(node));
             }
 
-            if simplify {
+            self.simplify();
+
+            return Ok(());
+        }
+
+        Err(Error::InvalidPosition(position))
+    }
+    
+    /// Removes the `Node` at the given position, if possible.
+    pub(crate) fn clear(&mut self, position: Vector3<u32>) -> Result<(), Error> {
+        if self.contains(position) {
+            let next_dimension = self.dimension() / 2;
+            let next_dimension_3d = vector![next_dimension, next_dimension, next_dimension];
+            let midpoint = self.min_position() + next_dimension_3d;
+            let octant = Octant::vector_diff(midpoint, position);
+
+            let mut node = if next_dimension == 1 {
+                None
+            } else if self.children[octant as usize].as_ref().is_some() {
+                self.children[octant as usize].take()
+            } else {
+                None
+            };
+
+            if let Some(_) = node {
+                node.as_mut().unwrap().clear(position).unwrap();
+            }
+
+            if self.child_count() == 0 {
+                self.ty = NodeType::Simplified;
                 self.simplify();
             }
-            
+
             return Ok(());
         }
 
@@ -162,7 +192,7 @@ impl<T: Debug + Default + Eq + PartialEq + Clone> Node<T> {
     ///
     /// If all children are leaf `Node`s with identical data, destroy all children, 
     /// and mark the `Node` as a leaf containing that data.
-    pub(crate) fn simplify(&mut self) {
+    pub(crate) fn simplify(&mut self) -> bool {
         let mut data = None;
 
         for i in 0..OCTREE_CHILDREN {
@@ -170,24 +200,23 @@ impl<T: Debug + Default + Eq + PartialEq + Clone> Node<T> {
                 if child.is_leaf() {
                     let leaf_data = child.leaf_data();
 
-                    if leaf_data.is_none() {
-                        return;
-                    } else if data.as_ref().is_none() {
+                    if data.as_ref().is_none() {
                         data = leaf_data;
                     } else if *data.as_ref().unwrap() != leaf_data.unwrap() {
-                        return;
+                        return false;
                     }
                 }
-            } else {
-                return;
+            } else if self.ty == NodeType::Internal {
+                return false;
             }
         }
 
-        self.ty = NodeType::Leaf((*data.unwrap()).clone());
-
-        for i in 0..OCTREE_CHILDREN {
-            *self.children[i] = None;
+        if data.is_some() {
+            self.ty = NodeType::Leaf((*data.unwrap()).clone());
         }
+
+        self.children.fill(Box::new(None));
+        true
     }
 
     /// Returns the dimension of the `Node`.
@@ -211,6 +240,12 @@ impl<T: Debug + Default + Eq + PartialEq + Clone> Node<T> {
             NodeType::Leaf(data) => Some(&data),
             _ => None,
         }
+    }
+
+    fn child_count(&self) -> usize {
+        self.children
+            .iter()
+            .fold(0, |acc, child| if child.deref().is_some() { acc + 1 } else { acc })
     }
 
     fn min_position(&self) -> Vector3<u32> {
