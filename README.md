@@ -13,15 +13,22 @@ let mut octree = Octree::<u8>::new(NonZeroU32::new(32).unwrap()).unwrap();
 octree.insert(vector![0, 0, 0], 1);
 assert!(matches!(octree.get(vector![0, 0, 0], Some(1))));
 
+// Clear this value from the `Octree`.
+octree.clear_at(vector![0, 0, 0]).unwrap();
+assert!(octree.get(vector![0, 0, 0]).is_none());
+
 // `Octree` simplification used where possible.
 // The following will now be condensed to a single leaf node with dimensions of 2*2*2:
-octree.insert(vector![0, 0, 1], 1);
-octree.insert(vector![0, 1, 0], 1);
-octree.insert(vector![0, 1, 1], 1);
-octree.insert(vector![1, 0, 0], 1);
-octree.insert(vector![1, 0, 1], 1);
-octree.insert(vector![1, 1, 0], 1);
-octree.insert(vector![1, 1, 1], 1);
+octree.insert(vector![0, 0, 0], 1).unwrap();
+octree.insert(vector![0, 0, 1], 1).unwrap();
+octree.insert(vector![0, 1, 0], 1).unwrap();
+octree.insert(vector![0, 1, 1], 1).unwrap();
+octree.insert(vector![1, 0, 0], 1).unwrap();
+octree.insert(vector![1, 0, 1], 1).unwrap();
+octree.insert(vector![1, 1, 0], 1).unwrap();
+octree.insert(vector![1, 1, 1], 1).unwrap();
 
-// Clear values from the `Octree`.
+// Clear the entire `Octree`.
+octree.clear();
+assert!(octree.get(vector![0, 0, 0]).is_none());
 ```
