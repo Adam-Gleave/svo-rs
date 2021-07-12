@@ -99,7 +99,7 @@ impl<T: Debug + Default + Eq + PartialEq + Clone> Node<T> {
     }
 
     /// Inserts a new leaf `Node` at the given position, if possible.
-    pub(crate) fn insert(&mut self, position: Vector3<u32>, data: T) -> Result<(), Error> {
+    pub(crate) fn insert(&mut self, position: Vector3<u32>, data: T, simplify: bool) -> Result<(), Error> {
         if self.contains(position) {
             if self.dimension() == 1 {
                 self.ty = NodeType::Leaf(data);
@@ -121,12 +121,15 @@ impl<T: Debug + Default + Eq + PartialEq + Clone> Node<T> {
                     Node::<T>::new(bounds)
                 };
 
-                node.insert(position, data).unwrap();
+                node.insert(position, data, simplify).unwrap();
 
                 self.children[octant as usize] = Box::new(Some(node));
             }
 
-            self.simplify();
+            if simplify {
+                self.simplify();
+            }
+            
             return Ok(());
         }
 
