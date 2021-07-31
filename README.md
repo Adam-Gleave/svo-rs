@@ -1,7 +1,9 @@
 # svo-rs
+
 Sparse Voxel Octree (SVO) library, entirely `#![no_std]`.
 
-# Usage
+## Usage
+
 ```rust
 use svo_rs::Octree;
 
