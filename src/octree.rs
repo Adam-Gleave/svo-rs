@@ -1,9 +1,12 @@
 use crate::{Error, Node};
 
+#[cfg(feature = "no-std")]
+use micromath::F32Ext;
+
 use nalgebra::{vector, Vector3};
 
 use alloc::boxed::Box;
-use core::{fmt::Debug, num::NonZeroU32};
+use core::{fmt::Debug, f32, num::NonZeroU32};
 
 #[derive(Debug)]
 pub struct Octree<T> {
