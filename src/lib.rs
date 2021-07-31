@@ -57,8 +57,8 @@ mod tests {
 
         octree.clear();
 
-        assert!(octree.get([0, 0, 0]).is_none());
-        assert!(octree.get([0, 0, 1]).is_none());
+        assert!(matches!(octree.get([0, 0, 0]), Some(0)));
+        assert!(matches!(octree.get([0, 0, 1]), Some(0)));
     }
 
     #[test]
@@ -71,8 +71,8 @@ mod tests {
         octree.clear_at([0, 0, 0]).unwrap();
         octree.clear_at([0, 0, 1]).unwrap();
 
-        assert!(octree.get([0, 0, 0]).is_none());
-        assert!(octree.get([0, 0, 1]).is_none());
+        assert!(matches!(octree.get([0, 0, 0]), Some(0)));
+        assert!(matches!(octree.get([0, 0, 1]), Some(0)));
 
         octree.insert([31, 31, 31], 1).unwrap();
         octree.insert([0, 0, 0], 1).unwrap();

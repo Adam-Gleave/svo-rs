@@ -7,12 +7,18 @@ use alloc::boxed::Box;
 use core::{fmt::Debug, f32, num::NonZeroU32};
 
 #[derive(Debug)]
-pub struct Octree<T> {
+pub struct Octree<T>
+where 
+    T: Debug + Default + Clone + Eq + PartialEq 
+{
     dimension: NonZeroU32,
     root: Box<Node<T>>,
 }
 
-impl<T: Debug + Default + Eq + PartialEq + Clone> Octree<T> {
+impl<T> Octree<T>
+where
+    T: Debug + Default + Clone + Eq + PartialEq 
+{
     /// Creates a new `Octree<T>` of given dimension.
     /// Returns an error if the dimension is 0
     pub fn new(dimension: NonZeroU32) -> Result<Self, Error> {

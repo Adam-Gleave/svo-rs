@@ -81,17 +81,23 @@ impl<T> Default for NodeType<T> {
 }
 
 #[derive(Debug, Default, Clone)]
-pub(crate) struct Node<T> {
+pub(crate) struct Node<T>
+where 
+    T: Debug + Default + Eq + PartialEq + Clone,
+{
     ty: NodeType<T>,
     bounds: [Vector3<u32>; BOUNDS_LEN],
     children: [Box<Option<Node<T>>>; OCTREE_CHILDREN],
 }
 
-impl<T: Debug + Default + Eq + PartialEq + Clone> Node<T> {
+impl<T> Node<T> 
+where
+    T: Debug + Default + Eq + PartialEq + Clone,
+{
     /// Creates a new `Node<T>` with the given bounds.
     pub(crate) fn new(bounds: [Vector3<u32>; BOUNDS_LEN]) -> Self {
         Self {
-            ty: NodeType::Internal,
+            ty: NodeType::Leaf(Default::default()),
             bounds,
             ..Default::default()
         }
@@ -141,16 +147,12 @@ impl<T: Debug + Default + Eq + PartialEq + Clone> Node<T> {
             let midpoint = self.min_position() + next_dimension_3d;
             let octant = Octant::vector_diff(midpoint, position);
 
-            let mut node = if next_dimension == 1 {
-                None
-            } else if self.children[octant as usize].as_ref().is_some() {
-                self.children[octant as usize].take()
-            } else {
-                None
-            };
+            if self.children[octant as usize].as_ref().is_some() {
+                let mut child = self.children[octant as usize].take().unwrap();
+                child.ty = NodeType::Leaf(Default::default());
+                child.clear(position).unwrap();
 
-            if let Some(_) = node {
-                node.as_mut().unwrap().clear(position).unwrap();
+                self.children[octant as usize] = Box::new(Some(child));
             }
 
             if self.child_count() == 0 {
