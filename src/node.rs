@@ -1,7 +1,13 @@
 use crate::{Error, Vector3};
 
+use hashbrown::HashMap;
+
 use alloc::boxed::Box;
-use core::{fmt::Debug, ops::Deref};
+use core::{
+    fmt::Debug,
+    hash::Hash,
+    ops::{Deref, DerefMut},
+};
 
 pub(crate) const OCTREE_CHILDREN: usize = 8;
 
@@ -82,17 +88,17 @@ impl<T> Default for NodeType<T> {
 
 #[derive(Debug, Default, Clone)]
 pub(crate) struct Node<T>
-where 
-    T: Debug + Default + Eq + PartialEq + Clone,
+where
+    T: Debug + Default + Eq + PartialEq + Ord + PartialOrd + Clone + Copy + Hash,
 {
     ty: NodeType<T>,
     bounds: [Vector3<u32>; BOUNDS_LEN],
     children: [Box<Option<Node<T>>>; OCTREE_CHILDREN],
 }
 
-impl<T> Node<T> 
+impl<T> Node<T>
 where
-    T: Debug + Default + Eq + PartialEq + Clone,
+    T: Debug + Default + Eq + PartialEq + Ord + PartialOrd + Clone + Copy + Hash,
 {
     /// Creates a new `Node<T>` with the given bounds.
     pub(crate) fn new(bounds: [Vector3<u32>; BOUNDS_LEN]) -> Self {
@@ -136,9 +142,13 @@ where
             return Ok(());
         }
 
-        Err(Error::InvalidPosition { x: position.x, y: position.y, z: position.z })
+        Err(Error::InvalidPosition {
+            x: position.x,
+            y: position.y,
+            z: position.z,
+        })
     }
-    
+
     /// Removes the `Node` at the given position, if possible.
     pub(crate) fn clear(&mut self, position: Vector3<u32>) -> Result<(), Error> {
         if self.contains(position) {
@@ -163,7 +173,11 @@ where
             return Ok(());
         }
 
-        Err(Error::InvalidPosition { x: position.x, y: position.y, z: position.z })
+        Err(Error::InvalidPosition {
+            x: position.x,
+            y: position.y,
+            z: position.z,
+        })
     }
 
     /// Gets data from a `Node` at the given position, if possible.
@@ -190,7 +204,7 @@ where
 
     /// Simplifies the `Node`.
     ///
-    /// If all children are leaf `Node`s with identical data, destroy all children, 
+    /// If all children are leaf `Node`s with identical data, destroy all children,
     /// and mark the `Node` as a leaf containing that data.
     pub(crate) fn simplify(&mut self) -> bool {
         let mut data = None;
@@ -217,6 +231,39 @@ where
 
         self.children.fill(Box::new(None));
         true
+    }
+
+    /// Returns a higher LOD of the current `Node`.
+    ///
+    /// For all children of a leaf `Node`, take the most common data of all children,
+    /// destroy all children, and mark the `Node` as a leaf containing that data.
+    pub(crate) fn lod(&mut self) {
+        let mut all_data = [Default::default(); OCTREE_CHILDREN];
+        for (i, c) in self.children.iter_mut().enumerate().map(|(i, c)| (i, c.deref_mut())) {
+            if let Some(c) = c {
+                if c.is_leaf() {
+                    let leaf_data = c.leaf_data();
+
+                    if leaf_data.is_some() {
+                        all_data[i] = *leaf_data.unwrap();
+                    }
+                } else {
+                    c.lod();
+                }
+            } else {
+                return;
+            }
+        }
+
+        let mut counts = HashMap::new();
+        for data in all_data.iter() {
+            counts.entry(*data).and_modify(|e| *e += 1).or_insert(1);
+        }
+
+        let (common_data, _) = itertools::max(counts.iter()).unwrap();
+        self.ty = NodeType::Leaf(*common_data);
+
+        self.children.fill(Box::new(None));
     }
 
     /// Returns the dimension of the `Node`.

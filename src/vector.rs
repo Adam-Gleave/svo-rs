@@ -2,8 +2,8 @@ use core::ops::{Add, Mul};
 
 #[derive(Default, Debug, Clone, Copy)]
 pub(crate) struct Vector3<T>
-where 
-    T: Copy 
+where
+    T: Copy,
 {
     pub x: T,
     pub y: T,

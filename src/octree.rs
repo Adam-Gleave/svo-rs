@@ -4,12 +4,12 @@ use crate::{Error, Node, Vector3};
 use micromath::F32Ext;
 
 use alloc::boxed::Box;
-use core::{fmt::Debug, f32, num::NonZeroU32};
+use core::{f32, fmt::Debug, hash::Hash, num::NonZeroU32};
 
 #[derive(Debug)]
 pub struct Octree<T>
-where 
-    T: Debug + Default + Clone + Eq + PartialEq 
+where
+    T: Debug + Default + Clone + Eq + PartialEq + Ord + PartialOrd + Copy + Hash,
 {
     dimension: NonZeroU32,
     root: Box<Node<T>>,
@@ -17,7 +17,7 @@ where
 
 impl<T> Octree<T>
 where
-    T: Debug + Default + Clone + Eq + PartialEq 
+    T: Debug + Default + Clone + Eq + PartialEq + Ord + PartialOrd + Copy + Hash,
 {
     /// Creates a new `Octree<T>` of given dimension.
     /// Returns an error if the dimension is 0
@@ -60,6 +60,24 @@ where
             Vector3::from([0, 0, 0]),
             Vector3::from([self.dimension.get(), self.dimension.get(), self.dimension.get()]),
         ]));
+    }
+
+    /// Creates a new `Octree` by decreasing the leaf dimension.
+    pub fn new_lod(&self) -> Self {
+        let mut root = self.root.clone();
+        root.lod();
+
+        Self {
+            dimension: self.dimension,
+            root,
+        }
+    }
+
+    /// Effectively decreases the leaf dimension of the `Octree`.
+    /// Moves the leaf dimension up a level, and all leaves are formed by the most common data of their
+    /// original children.
+    pub fn lod(&mut self) {
+        self.root.lod();
     }
 
     /// Returns the dimension of the root node.
