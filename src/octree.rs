@@ -1,9 +1,7 @@
-use crate::{Error, Node};
+use crate::{Error, Node, Vector3};
 
 #[cfg(feature = "no-std")]
 use micromath::F32Ext;
-
-use nalgebra::{vector, Vector3};
 
 use alloc::boxed::Box;
 use core::{fmt::Debug, f32, num::NonZeroU32};
@@ -23,8 +21,8 @@ impl<T: Debug + Default + Eq + PartialEq + Clone> Octree<T> {
             return Ok(Self {
                 dimension,
                 root: Box::new(Node::<T>::new([
-                    vector![0, 0, 0],
-                    vector![dimension.get(), dimension.get(), dimension.get()],
+                    Vector3::from([0, 0, 0]),
+                    Vector3::from([dimension.get(), dimension.get(), dimension.get()]),
                 ])),
             });
         }
@@ -34,27 +32,27 @@ impl<T: Debug + Default + Eq + PartialEq + Clone> Octree<T> {
 
     /// Inserts data of type `T` into the given position in the `Octree`.
     /// Returns an error if the position does not exist within the confines of the `Octree`.
-    pub fn insert(&mut self, position: Vector3<u32>, data: T) -> Result<(), Error> {
-        self.root.insert(position, data)
+    pub fn insert(&mut self, position: [u32; 3], data: T) -> Result<(), Error> {
+        self.root.insert(position.into(), data)
     }
 
     /// Retrieves data of type `T` from the given position in the `Octree`.
     /// Since the `Octree` is sparse, returns `None` if the position does not currently store any data.
-    pub fn get(&self, position: Vector3<u32>) -> Option<&T> {
-        self.root.get(position)
+    pub fn get(&self, position: [u32; 3]) -> Option<&T> {
+        self.root.get(position.into())
     }
 
     /// Removes the `Node` at the given position in the `Octree`, if it exists.
     /// This will simplify the `Octree` if `auto_simplify` is specified.
-    pub fn clear_at(&mut self, position: Vector3<u32>) -> Result<(), Error> {
-        self.root.clear(position)
+    pub fn clear_at(&mut self, position: [u32; 3]) -> Result<(), Error> {
+        self.root.clear(position.into())
     }
 
     /// Removes all `Node`s from the `Octree`.
     pub fn clear(&mut self) {
         self.root = Box::new(Node::<T>::new([
-            vector![0, 0, 0],
-            vector![self.dimension.get(), self.dimension.get(), self.dimension.get()],
+            Vector3::from([0, 0, 0]),
+            Vector3::from([self.dimension.get(), self.dimension.get(), self.dimension.get()]),
         ]));
     }
 
@@ -64,7 +62,7 @@ impl<T: Debug + Default + Eq + PartialEq + Clone> Octree<T> {
     }
 
     /// Returns whether the given position exists within the confines of the `Octree`.
-    pub fn contains(&self, position: Vector3<u32>) -> bool {
-        self.root.contains(position)
+    pub fn contains(&self, position: [u32; 3]) -> bool {
+        self.root.contains(position.into())
     }
 }

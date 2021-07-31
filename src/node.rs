@@ -1,6 +1,4 @@
-use crate::Error;
-
-use nalgebra::{vector, Vector3};
+use crate::{Error, Vector3};
 
 use alloc::boxed::Box;
 use core::{fmt::Debug, ops::Deref};
@@ -25,14 +23,14 @@ enum Octant {
 impl Octant {
     fn offset(&self) -> Vector3<u32> {
         match self {
-            Self::LeftRearBase => vector![0, 0, 0],
-            Self::RightRearBase => vector![1, 0, 0],
-            Self::LeftRearTop => vector![0, 0, 1],
-            Self::RightRearTop => vector![1, 0, 1],
-            Self::LeftFrontBase => vector![0, 1, 0],
-            Self::RightFrontBase => vector![1, 1, 0],
-            Self::LeftFrontTop => vector![0, 1, 1],
-            Self::RightFrontTop => vector![1, 1, 1],
+            Self::LeftRearBase => Vector3::from([0, 0, 0]),
+            Self::RightRearBase => Vector3::from([1, 0, 0]),
+            Self::LeftRearTop => Vector3::from([0, 0, 1]),
+            Self::RightRearTop => Vector3::from([1, 0, 1]),
+            Self::LeftFrontBase => Vector3::from([0, 1, 0]),
+            Self::RightFrontBase => Vector3::from([1, 1, 0]),
+            Self::LeftFrontTop => Vector3::from([0, 1, 1]),
+            Self::RightFrontTop => Vector3::from([1, 1, 1]),
         }
     }
 
@@ -108,7 +106,7 @@ impl<T: Debug + Default + Eq + PartialEq + Clone> Node<T> {
                 self.ty = NodeType::Internal;
 
                 let dimension = self.dimension() / 2;
-                let dimension_3d = vector![dimension, dimension, dimension];
+                let dimension_3d = Vector3::from([dimension, dimension, dimension]);
                 let midpoint = self.min_position() + dimension_3d;
                 let octant = Octant::vector_diff(midpoint, position);
 
@@ -132,14 +130,14 @@ impl<T: Debug + Default + Eq + PartialEq + Clone> Node<T> {
             return Ok(());
         }
 
-        Err(Error::InvalidPosition(position))
+        Err(Error::InvalidPosition { x: position.x, y: position.y, z: position.z })
     }
     
     /// Removes the `Node` at the given position, if possible.
     pub(crate) fn clear(&mut self, position: Vector3<u32>) -> Result<(), Error> {
         if self.contains(position) {
             let next_dimension = self.dimension() / 2;
-            let next_dimension_3d = vector![next_dimension, next_dimension, next_dimension];
+            let next_dimension_3d = Vector3::from([next_dimension, next_dimension, next_dimension]);
             let midpoint = self.min_position() + next_dimension_3d;
             let octant = Octant::vector_diff(midpoint, position);
 
@@ -163,7 +161,7 @@ impl<T: Debug + Default + Eq + PartialEq + Clone> Node<T> {
             return Ok(());
         }
 
-        Err(Error::InvalidPosition(position))
+        Err(Error::InvalidPosition { x: position.x, y: position.y, z: position.z })
     }
 
     /// Gets data from a `Node` at the given position, if possible.
@@ -173,7 +171,7 @@ impl<T: Debug + Default + Eq + PartialEq + Clone> Node<T> {
                 NodeType::Leaf(data) => Some(data),
                 _ => {
                     let dimension = self.dimension() / 2;
-                    let dimension_3d = vector![dimension, dimension, dimension];
+                    let dimension_3d = Vector3::from([dimension, dimension, dimension]);
                     let midpoint = self.min_position() + dimension_3d;
                     let octant = Octant::vector_diff(midpoint, position);
 
