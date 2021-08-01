@@ -1,8 +1,8 @@
-use core::{fmt, num::NonZeroU32};
+use core::fmt;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Error {
-    InvalidDimension(NonZeroU32),
+    InvalidDimension(u32),
     InvalidPosition { x: u32, y: u32, z: u32 },
     InvalidOctant(usize),
 }
