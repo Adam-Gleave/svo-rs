@@ -29,7 +29,7 @@ where
         let max_depth = (dimension.get() as f32).log(2.0);
 
         if max_depth.fract() == 0.0 {
-            return Ok(Self {
+            Ok(Self {
                 dimension,
                 curr_lod_level: 1,
                 max_lod_level: max_depth.round() as u32,
@@ -39,9 +39,9 @@ where
                     Vector3::from([dimension.get(), dimension.get(), dimension.get()]),
                 ])),
             });
+        } else {
+            Err(Error::InvalidDimension(dimension))
         }
-
-        Err(Error::InvalidDimension(dimension))
     }
 
     /// Inserts data of type `T` into the given position in the `Octree`.

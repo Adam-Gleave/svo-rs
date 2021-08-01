@@ -177,15 +177,14 @@ where
             }
 
             self.simplify();
-
-            return Ok(());
+            Ok(())
+        } else {
+            Err(Error::InvalidPosition {
+                x: position.x,
+                y: position.y,
+                z: position.z,
+            })
         }
-
-        Err(Error::InvalidPosition {
-            x: position.x,
-            y: position.y,
-            z: position.z,
-        })
     }
 
     /// Removes the `Node` at the given position, if possible.
@@ -219,14 +218,14 @@ where
                 self.children[octant as usize].deref_mut().replace(child);
             }
 
-            return Ok(());
+            Ok(())
+        } else {
+            Err(Error::InvalidPosition {
+                x: position.x,
+                y: position.y,
+                z: position.z,
+            })
         }
-
-        Err(Error::InvalidPosition {
-            x: position.x,
-            y: position.y,
-            z: position.z,
-        })
     }
 
     /// Gets data from a `Node` at the given position, if possible.
@@ -346,14 +345,14 @@ where
             let midpoint = self.min_position() + dimension_3d;
             let octant = Octant::vector_diff(midpoint, position);
 
-            return Some(ChildInfo {
+            Some(ChildInfo {
                 dimension,
                 dimension_3d,
                 octant,
-            });
+            })
+        } else {
+            None
         }
-
-        None
     }
 
     fn child_bounds(&self, dimension_3d: Vector3<u32>, octant: Octant) -> Bounds {
