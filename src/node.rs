@@ -4,6 +4,7 @@ use hashbrown::HashMap;
 
 use alloc::boxed::Box;
 use core::{
+    convert::TryFrom,
     fmt::Debug,
     hash::Hash,
     ops::{Deref, DerefMut},
@@ -24,6 +25,24 @@ enum Octant {
     RightFrontBase = 5,
     LeftFrontTop = 6,
     RightFrontTop = 7,
+}
+
+impl TryFrom<usize> for Octant {
+    type Error = Error;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::LeftRearBase),
+            1 => Ok(Self::RightRearBase),
+            2 => Ok(Self::LeftRearTop),
+            3 => Ok(Self::RightRearTop),
+            4 => Ok(Self::LeftFrontBase),
+            5 => Ok(Self::RightFrontBase),
+            6 => Ok(Self::LeftFrontTop),
+            7 => Ok(Self::RightFrontTop),
+            _ => Err(Error::InvalidOctant(value)),
+        }
+    }
 }
 
 impl Octant {
@@ -115,8 +134,6 @@ where
             if self.dimension() == 1 {
                 self.ty = NodeType::Leaf(data);
             } else {
-                self.ty = NodeType::Internal;
-
                 let dimension = self.dimension() / 2;
                 let dimension_3d = Vector3::from([dimension, dimension, dimension]);
                 let midpoint = self.min_position() + dimension_3d;
@@ -132,9 +149,26 @@ where
                     Node::<T>::new(bounds)
                 };
 
+                if self.is_leaf() && dimension == 1 {
+                    for i in 0..OCTREE_CHILDREN {
+                        if i != octant as usize {
+                            let new_octant = Octant::try_from(i).unwrap();
+                            let lower = self.min_position() + dimension_3d.component_mul(&new_octant.offset());
+                            let upper = lower + dimension_3d;
+                            let bounds = [lower, upper];
+
+                            let mut new_node = Node::<T>::new(bounds);
+                            new_node.ty = NodeType::Leaf(*self.leaf_data().unwrap());
+
+                            self.children[new_octant as usize] = Box::new(Some(new_node));
+                        }
+                    }
+                }
+
                 node.insert(position, data).unwrap();
 
                 self.children[octant as usize] = Box::new(Some(node));
+                self.ty = NodeType::Internal;
             }
 
             self.simplify();
@@ -152,22 +186,37 @@ where
     /// Removes the `Node` at the given position, if possible.
     pub(crate) fn clear(&mut self, position: Vector3<u32>) -> Result<(), Error> {
         if self.contains(position) {
-            let next_dimension = self.dimension() / 2;
-            let next_dimension_3d = Vector3::from([next_dimension, next_dimension, next_dimension]);
-            let midpoint = self.min_position() + next_dimension_3d;
+            let dimension = self.dimension() / 2;
+            let dimension_3d = Vector3::from([dimension, dimension, dimension]);
+            let midpoint = self.min_position() + dimension_3d;
             let octant = Octant::vector_diff(midpoint, position);
 
-            if self.children[octant as usize].as_ref().is_some() {
+            if self.is_leaf() && dimension == 1 {
+                #[cfg(test)]
+                println!("Self: {:?}", self);
+
+                for i in 0..OCTREE_CHILDREN {
+                    let (octant, data) = if i != octant as usize {                        
+                        (Octant::try_from(i).unwrap(), *self.leaf_data().unwrap())
+                    } else {
+                        (octant, Default::default())
+                    };
+                    
+                    let lower = self.min_position() + dimension_3d.component_mul(&octant.offset());
+                    let upper = lower + dimension_3d;
+                    let bounds = [lower, upper];
+
+                    let mut node = Node::<T>::new(bounds);
+                    node.ty = NodeType::Leaf(data);
+
+                    self.children[i].deref_mut().replace(node);
+                }
+            } else if self.children[octant as usize].as_ref().is_some() {
                 let mut child = self.children[octant as usize].take().unwrap();
-                child.ty = NodeType::Leaf(Default::default());
                 child.clear(position).unwrap();
+                child.ty = NodeType::Leaf(Default::default());
 
-                self.children[octant as usize] = Box::new(Some(child));
-            }
-
-            if self.child_count() == 0 {
-                self.ty = NodeType::Simplified;
-                self.simplify();
+                self.children[octant as usize].deref_mut().replace(child);
             }
 
             return Ok(());
@@ -226,6 +275,9 @@ where
         }
 
         if data.is_some() {
+            #[cfg(test)]
+            println!("Simplifying");
+
             self.ty = NodeType::Leaf((*data.unwrap()).clone());
         }
 

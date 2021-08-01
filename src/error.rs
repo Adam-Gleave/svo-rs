@@ -4,6 +4,7 @@ use core::{fmt, num::NonZeroU32};
 pub enum Error {
     InvalidDimension(NonZeroU32),
     InvalidPosition { x: u32, y: u32, z: u32 },
+    InvalidOctant(usize),
 }
 
 impl fmt::Display for Error {
@@ -13,6 +14,7 @@ impl fmt::Display for Error {
             Self::InvalidPosition { x, y, z } => {
                 write!(f, "Position {{{}, {}, {}}} does not exist in octree.", x, y, z)
             }
+            Self::InvalidOctant(octant) => write!(f, "Invalid octant: {}", octant),
         }
     }
 }
