@@ -129,7 +129,7 @@ where
     }
 
     /// Inserts a new leaf `Node` at the given position, if possible.
-    pub(crate) fn insert(&mut self, position: Vector3<u32>, data: T) -> Result<(), Error> {
+    pub(crate) fn insert(&mut self, position: Vector3<u32>, min_dimension: u32, data: T) -> Result<(), Error> {
         if self.contains(position) {
             if self.dimension() == 1 {
                 self.ty = NodeType::Leaf(data);
@@ -149,7 +149,7 @@ where
                     Node::<T>::new(bounds)
                 };
 
-                if self.is_leaf() && dimension == 1 {
+                if self.is_leaf() && dimension == min_dimension {
                     for i in 0..OCTREE_CHILDREN {
                         if i != octant as usize {
                             let new_octant = Octant::try_from(i).unwrap();
@@ -165,7 +165,7 @@ where
                     }
                 }
 
-                node.insert(position, data).unwrap();
+                node.insert(position, min_dimension, data).unwrap();
 
                 self.children[octant as usize] = Box::new(Some(node));
                 self.ty = NodeType::Internal;
@@ -184,17 +184,14 @@ where
     }
 
     /// Removes the `Node` at the given position, if possible.
-    pub(crate) fn clear(&mut self, position: Vector3<u32>) -> Result<(), Error> {
+    pub(crate) fn clear(&mut self, position: Vector3<u32>, min_dimension: u32) -> Result<(), Error> {
         if self.contains(position) {
             let dimension = self.dimension() / 2;
             let dimension_3d = Vector3::from([dimension, dimension, dimension]);
             let midpoint = self.min_position() + dimension_3d;
             let octant = Octant::vector_diff(midpoint, position);
 
-            if self.is_leaf() && dimension == 1 {
-                #[cfg(test)]
-                println!("Self: {:?}", self);
-
+            if self.is_leaf() && dimension == min_dimension {
                 for i in 0..OCTREE_CHILDREN {
                     let (octant, data) = if i != octant as usize {                        
                         (Octant::try_from(i).unwrap(), *self.leaf_data().unwrap())
@@ -213,7 +210,7 @@ where
                 }
             } else if self.children[octant as usize].as_ref().is_some() {
                 let mut child = self.children[octant as usize].take().unwrap();
-                child.clear(position).unwrap();
+                child.clear(position, min_dimension).unwrap();
                 child.ty = NodeType::Leaf(Default::default());
 
                 self.children[octant as usize].deref_mut().replace(child);
@@ -275,9 +272,6 @@ where
         }
 
         if data.is_some() {
-            #[cfg(test)]
-            println!("Simplifying");
-
             self.ty = NodeType::Leaf((*data.unwrap()).clone());
         }
 

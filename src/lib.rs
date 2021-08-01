@@ -107,7 +107,6 @@ mod tests {
         octree.insert([1, 0, 1], 1).unwrap();
         octree.insert([1, 1, 0], 1).unwrap();
         octree.insert([1, 1, 1], 1).unwrap();
-        println!("{:?}", octree);
 
         octree.clear_at([1, 1, 1]).unwrap();
 
@@ -116,7 +115,7 @@ mod tests {
     }
 
     #[test]
-    fn lod() {
+    fn lod_down() {
         let mut octree = Octree::<u8>::new(NonZeroU32::new(32).unwrap()).unwrap();
         octree.insert([0, 0, 0], 2).unwrap();
         octree.insert([0, 0, 1], 2).unwrap();
@@ -126,13 +125,13 @@ mod tests {
         octree.insert([1, 0, 1], 2).unwrap();
         octree.insert([1, 1, 0], 2).unwrap();
         octree.insert([1, 1, 1], 1).unwrap();
-        octree.lod();
 
+        octree.lod_down();
         assert!(matches!(octree.get([0, 1, 0]), Some(2)));
     }
 
     #[test]
-    fn new_lod() {
+    fn lod_up() {
         let mut octree = Octree::<u8>::new(NonZeroU32::new(32).unwrap()).unwrap();
         octree.insert([0, 0, 0], 2).unwrap();
         octree.insert([0, 0, 1], 2).unwrap();
@@ -142,10 +141,14 @@ mod tests {
         octree.insert([1, 0, 1], 2).unwrap();
         octree.insert([1, 1, 0], 2).unwrap();
         octree.insert([1, 1, 1], 1).unwrap();
-        
-        let octree = octree.new_lod();
 
+        octree.lod_down();
         assert!(matches!(octree.get([0, 1, 0]), Some(2)));
+
+        octree.lod_up();
+        octree.insert([0, 0, 0], 1).unwrap();
+        assert!(matches!(octree.get([0, 0, 0]), Some(1)));
+        assert!(matches!(octree.get([0, 0, 1]), Some(2)));
     }
 
     #[test]
