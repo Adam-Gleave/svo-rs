@@ -72,7 +72,7 @@ mod tests {
         octree.insert([1, 1, 0], 1).unwrap();
         octree.insert([1, 1, 1], 1).unwrap();
         octree.insert([0, 0, 0], 2).unwrap();
-        
+
         assert!(matches!(octree.get([0, 0, 0]), Some(2)));
         assert!(matches!(octree.get([0, 0, 1]), Some(1)));
     }

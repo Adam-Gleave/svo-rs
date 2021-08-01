@@ -10,9 +10,11 @@ use core::{
     ops::{Deref, DerefMut},
 };
 
+const BOUNDS_LEN: usize = 2;
+
 pub(crate) const OCTREE_CHILDREN: usize = 8;
 
-const BOUNDS_LEN: usize = 2;
+pub(crate) type Bounds = [Vector3<u32>; BOUNDS_LEN];
 
 #[repr(usize)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -93,7 +95,7 @@ impl Octant {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum NodeType<T> {
+enum NodeType<T> {
     Leaf(T),
     Internal,
     Simplified,
@@ -105,13 +107,19 @@ impl<T> Default for NodeType<T> {
     }
 }
 
+struct ChildInfo {
+    dimension: u32,
+    dimension_3d: Vector3<u32>,
+    octant: Octant,
+}
+
 #[derive(Debug, Default, Clone)]
 pub(crate) struct Node<T>
 where
     T: Debug + Default + Eq + PartialEq + Ord + PartialOrd + Clone + Copy + Hash,
 {
     ty: NodeType<T>,
-    bounds: [Vector3<u32>; BOUNDS_LEN],
+    bounds: Bounds,
     children: [Box<Option<Node<T>>>; OCTREE_CHILDREN],
 }
 
@@ -120,7 +128,7 @@ where
     T: Debug + Default + Eq + PartialEq + Ord + PartialOrd + Clone + Copy + Hash,
 {
     /// Creates a new `Node<T>` with the given bounds.
-    pub(crate) fn new(bounds: [Vector3<u32>; BOUNDS_LEN]) -> Self {
+    pub(crate) fn new(bounds: Bounds) -> Self {
         Self {
             ty: NodeType::Leaf(Default::default()),
             bounds,
@@ -134,14 +142,13 @@ where
             if self.dimension() == 1 {
                 self.ty = NodeType::Leaf(data);
             } else {
-                let dimension = self.dimension() / 2;
-                let dimension_3d = Vector3::from([dimension, dimension, dimension]);
-                let midpoint = self.min_position() + dimension_3d;
-                let octant = Octant::vector_diff(midpoint, position);
+                let ChildInfo {
+                    dimension,
+                    dimension_3d,
+                    octant,
+                } = self.child_info(position).unwrap();
 
-                let lower = self.min_position() + dimension_3d.component_mul(&octant.offset());
-                let upper = lower + dimension_3d;
-                let bounds = [lower, upper];
+                let bounds = self.child_bounds(dimension_3d, octant);
 
                 let mut node = if self.children[octant as usize].as_ref().is_some() {
                     self.children[octant as usize].take().unwrap()
@@ -153,9 +160,7 @@ where
                     for i in 0..OCTREE_CHILDREN {
                         if i != octant as usize {
                             let new_octant = Octant::try_from(i).unwrap();
-                            let lower = self.min_position() + dimension_3d.component_mul(&new_octant.offset());
-                            let upper = lower + dimension_3d;
-                            let bounds = [lower, upper];
+                            let bounds = self.child_bounds(dimension_3d, new_octant);
 
                             let mut new_node = Node::<T>::new(bounds);
                             new_node.ty = NodeType::Leaf(*self.leaf_data().unwrap());
@@ -186,23 +191,21 @@ where
     /// Removes the `Node` at the given position, if possible.
     pub(crate) fn clear(&mut self, position: Vector3<u32>, min_dimension: u32) -> Result<(), Error> {
         if self.contains(position) {
-            let dimension = self.dimension() / 2;
-            let dimension_3d = Vector3::from([dimension, dimension, dimension]);
-            let midpoint = self.min_position() + dimension_3d;
-            let octant = Octant::vector_diff(midpoint, position);
+            let ChildInfo {
+                dimension,
+                dimension_3d,
+                octant,
+            } = self.child_info(position).unwrap();
 
             if self.is_leaf() && dimension == min_dimension {
                 for i in 0..OCTREE_CHILDREN {
-                    let (octant, data) = if i != octant as usize {                        
+                    let (octant, data) = if i != octant as usize {
                         (Octant::try_from(i).unwrap(), *self.leaf_data().unwrap())
                     } else {
                         (octant, Default::default())
                     };
-                    
-                    let lower = self.min_position() + dimension_3d.component_mul(&octant.offset());
-                    let upper = lower + dimension_3d;
-                    let bounds = [lower, upper];
 
+                    let bounds = self.child_bounds(dimension_3d, octant);
                     let mut node = Node::<T>::new(bounds);
                     node.ty = NodeType::Leaf(data);
 
@@ -232,10 +235,11 @@ where
             return match &self.ty {
                 NodeType::Leaf(data) => Some(data),
                 _ => {
-                    let dimension = self.dimension() / 2;
-                    let dimension_3d = Vector3::from([dimension, dimension, dimension]);
-                    let midpoint = self.min_position() + dimension_3d;
-                    let octant = Octant::vector_diff(midpoint, position);
+                    let ChildInfo {
+                        dimension: _,
+                        dimension_3d: _,
+                        octant,
+                    } = self.child_info(position).unwrap();
 
                     match self.children[octant as usize].deref() {
                         Some(child) => child.get(position),
@@ -333,6 +337,30 @@ where
             NodeType::Leaf(data) => Some(&data),
             _ => None,
         }
+    }
+
+    fn child_info(&self, position: Vector3<u32>) -> Option<ChildInfo> {
+        if self.contains(position) {
+            let dimension = self.dimension() / 2;
+            let dimension_3d = Vector3::from([dimension, dimension, dimension]);
+            let midpoint = self.min_position() + dimension_3d;
+            let octant = Octant::vector_diff(midpoint, position);
+
+            return Some(ChildInfo {
+                dimension,
+                dimension_3d,
+                octant,
+            });
+        }
+
+        None
+    }
+
+    fn child_bounds(&self, dimension_3d: Vector3<u32>, octant: Octant) -> Bounds {
+        let lower = self.min_position() + dimension_3d.component_mul(&octant.offset());
+        let upper = lower + dimension_3d;
+
+        [lower, upper]
     }
 
     fn child_count(&self) -> usize {
