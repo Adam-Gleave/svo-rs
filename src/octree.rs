@@ -9,7 +9,7 @@ use core::{f32, fmt::Debug, hash::Hash, num::NonZeroU32};
 #[derive(Debug)]
 pub struct Octree<T>
 where
-    T: Debug + Default + Clone + Eq + PartialEq + Ord + PartialOrd + Copy + Hash,
+    T: Debug + Default + Clone + Eq + PartialEq + Copy + Hash,
 {
     dimension: NonZeroU32,
     curr_lod_level: u32,
@@ -20,13 +20,13 @@ where
 
 impl<T> Octree<T>
 where
-    T: Debug + Default + Clone + Eq + PartialEq + Ord + PartialOrd + Copy + Hash,
+    T: Debug + Default + Clone + Eq + PartialEq + Copy + Hash,
 {
     /// Creates a new `Octree<T>` of given dimension.
     ///
     /// Valid dimensions are:
     /// * 1 (a single node, although this is pretty much useless)
-    /// * *n*, where *n* is a square number (the `Octree` will consist of n*n nodes) 
+    /// * *n*, where *n* is a square number (the `Octree` will consist of n*n nodes)
     ///
     /// # Example
     /// ```

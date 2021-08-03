@@ -2,7 +2,7 @@ use crate::{Error, Vector3};
 
 use hashbrown::HashMap;
 
-use alloc::boxed::Box;
+use alloc::{boxed::Box, vec::Vec};
 use core::{
     convert::TryFrom,
     fmt::Debug,
@@ -116,7 +116,7 @@ struct ChildInfo {
 #[derive(Debug, Default, Clone)]
 pub(crate) struct Node<T>
 where
-    T: Debug + Default + Eq + PartialEq + Ord + PartialOrd + Clone + Copy + Hash,
+    T: Debug + Default + Eq + PartialEq + Clone + Copy + Hash,
 {
     ty: NodeType<T>,
     bounds: Bounds,
@@ -125,7 +125,7 @@ where
 
 impl<T> Node<T>
 where
-    T: Debug + Default + Eq + PartialEq + Ord + PartialOrd + Clone + Copy + Hash,
+    T: Debug + Default + Eq + PartialEq + Clone + Copy + Hash,
 {
     /// Creates a new `Node<T>` with the given bounds.
     pub(crate) fn new(bounds: Bounds) -> Self {
@@ -139,7 +139,7 @@ where
     /// Inserts a new leaf `Node` at the given position, if possible.
     pub(crate) fn insert(&mut self, position: Vector3<u32>, min_dimension: u32, data: T) -> Result<(), Error> {
         if self.contains(position) {
-            if self.dimension() == 1 {
+            if self.dimension() == min_dimension {
                 self.ty = NodeType::Leaf(data);
             } else {
                 let ChildInfo {
@@ -213,7 +213,12 @@ where
             } else if self.children[octant as usize].as_ref().is_some() {
                 let mut child = self.children[octant as usize].take().unwrap();
                 child.clear(position, min_dimension).unwrap();
-                child.ty = NodeType::Leaf(Default::default());
+
+                child.ty = if self.is_leaf() || dimension == min_dimension {
+                    NodeType::Leaf(Default::default())
+                } else {
+                    NodeType::Internal
+                };
 
                 self.children[octant as usize].deref_mut().replace(child);
             }
@@ -309,8 +314,12 @@ where
             counts.entry(*data).and_modify(|e| *e += 1).or_insert(1);
         }
 
-        let (common_data, _) = itertools::max(counts.iter()).unwrap();
-        self.ty = NodeType::Leaf(*common_data);
+        if !counts.is_empty() {
+            let mut counts = counts.iter().collect::<Vec<(&T, &i32)>>();
+            counts.sort_by(|a, b| b.1.cmp(a.1));
+
+            self.ty = NodeType::Leaf(*counts[0].0);
+        }
 
         self.children.fill(Box::new(None));
     }

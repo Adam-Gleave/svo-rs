@@ -56,6 +56,49 @@ mod tests {
         octree.clear_at([1, 1, 1]).unwrap();
 
         assert!(matches!(octree.get([1, 1, 1]), Some(0)));
-        assert!(matches!(octree.get([0, 0, 0]), Some(0)));
+        assert!(matches!(octree.get([0, 0, 0]), Some(1)));
     }
+
+    // #[test]
+    // fn test() {
+    //     let mut octree = Octree::<u8>::new(NonZeroU32::new(32).unwrap()).unwrap();
+        
+    //     octree.insert([0, 0, 0], 1).unwrap();
+    //     octree.insert([0, 0, 1], 1).unwrap();
+    //     octree.insert([0, 1, 0], 1).unwrap();
+    //     octree.insert([0, 1, 1], 1).unwrap();
+    //     octree.insert([1, 0, 0], 1).unwrap();
+    //     octree.insert([1, 0, 1], 1).unwrap();
+    //     octree.insert([1, 1, 0], 1).unwrap();
+    //     octree.insert([1, 1, 1], 1).unwrap();
+
+        // octree.insert([0, 0, 2], 2).unwrap();
+        // octree.insert([1, 0, 2], 2).unwrap();
+        // octree.insert([0, 0, 3], 2).unwrap();
+        // octree.insert([1, 0, 3], 2).unwrap();
+        // octree.insert([0, 1, 2], 2).unwrap();
+        // octree.insert([1, 1, 2], 2).unwrap();
+        // octree.insert([0, 1, 3], 2).unwrap();
+        // octree.insert([1, 1, 3], 2).unwrap();
+
+        // octree.insert([0, 2, 0], 3).unwrap();
+        // octree.insert([1, 2, 0], 3).unwrap();
+        // octree.insert([0, 2, 1], 3).unwrap();
+        // octree.insert([1, 2, 1], 3).unwrap();
+        // octree.insert([0, 3, 0], 3).unwrap();
+        // octree.insert([1, 3, 0], 3).unwrap();
+        // octree.insert([0, 3, 1], 3).unwrap();
+        // octree.insert([1, 3, 1], 3).unwrap();
+
+        // octree.insert([2, 0, 0], 4).unwrap();
+        // octree.insert([3, 0, 0], 4).unwrap();
+        // octree.insert([2, 0, 1], 4).unwrap();
+        // octree.insert([3, 0, 1], 4).unwrap();
+        // octree.insert([2, 1, 0], 4).unwrap();
+        // octree.insert([3, 1, 0], 4).unwrap();
+        // octree.insert([2, 1, 1], 4).unwrap();
+        // octree.insert([3, 1, 1], 4).unwrap();
+
+        // println!("{:?}", octree);
+    // }
 }
