@@ -5,7 +5,6 @@ use hashbrown::HashMap;
 use alloc::{boxed::Box, vec::Vec};
 use core::{
     convert::TryFrom,
-    fmt::Debug,
     hash::Hash,
     ops::{Deref, DerefMut},
 };
@@ -17,7 +16,7 @@ pub(crate) const OCTREE_CHILDREN: usize = 8;
 pub(crate) type Bounds = [Vector3<u32>; BOUNDS_LEN];
 
 #[repr(usize)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Octant {
     LeftRearBase = 0,
     RightRearBase = 1,
@@ -113,10 +112,10 @@ struct ChildInfo {
     octant: Octant,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub(crate) struct Node<T>
 where
-    T: Debug + Default + Eq + PartialEq + Clone + Copy + Hash,
+    T: Default + Eq + PartialEq + Clone + Copy + Hash,
 {
     ty: NodeType<T>,
     bounds: Bounds,
@@ -125,7 +124,7 @@ where
 
 impl<T> Node<T>
 where
-    T: Debug + Default + Eq + PartialEq + Clone + Copy + Hash,
+    T: Default + Eq + PartialEq + Clone + Copy + Hash,
 {
     /// Creates a new `Node<T>` with the given bounds.
     pub(crate) fn new(bounds: Bounds) -> Self {
@@ -269,7 +268,10 @@ where
                     let leaf_data = child.leaf_data();
 
                     if data.as_ref().is_none() {
-                        data = leaf_data;
+                        data = match &child.ty {
+                            NodeType::Leaf(d) => Some(d),
+                            _ => panic!("Leaf Node `ty` member is not NodeType::Leaf(T) when it should be!"),
+                        };
                     } else if *data.as_ref().unwrap() != leaf_data.unwrap() {
                         return false;
                     }
@@ -292,14 +294,16 @@ where
     /// For all children of a leaf `Node`, take the most common data of all children,
     /// destroy all children, and mark the `Node` as a leaf containing that data.
     pub(crate) fn lod(&mut self) {
-        let mut all_data = [Default::default(); OCTREE_CHILDREN];
-        for (i, c) in self.children.iter_mut().enumerate().map(|(i, c)| (i, c.deref_mut())) {
+        let mut all_data = Vec::<T>::new();
+        for (_i, c) in self.children.iter_mut().enumerate().map(|(i, c)| (i, c.deref_mut())) {
             if let Some(c) = c {
                 if c.is_leaf() {
                     let leaf_data = c.leaf_data();
-
                     if leaf_data.is_some() {
-                        all_data[i] = *leaf_data.unwrap();
+                        all_data.push(match &c.ty {
+                            NodeType::Leaf(d) => *d,
+                            _ => panic!("Leaf Node `ty` member is not NodeType::Leaf(T) when it should be!"),
+                        });
                     }
                 } else {
                     c.lod();
@@ -309,16 +313,14 @@ where
             }
         }
 
-        let mut counts = HashMap::new();
-        for data in all_data.iter() {
-            counts.entry(*data).and_modify(|e| *e += 1).or_insert(1);
-        }
+        // Counting how many times a certain data value is present inside the children
+        let counts = all_data.drain(..).fold(HashMap::new(), |mut acc, v| {
+            acc.entry(v).and_modify(|e| *e += 1).or_insert(1);
+            acc
+        });
 
         if !counts.is_empty() {
-            let mut counts = counts.iter().collect::<Vec<(&T, &i32)>>();
-            counts.sort_by(|a, b| b.1.cmp(a.1));
-
-            self.ty = NodeType::Leaf(*counts[0].0);
+            self.ty = NodeType::Leaf(counts.into_iter().max_by_key(|(_, count)| *count).unwrap().0);
         }
 
         self.children.fill(Box::new(None));
