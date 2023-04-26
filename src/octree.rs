@@ -6,7 +6,6 @@ use micromath::F32Ext;
 use alloc::boxed::Box;
 use core::{f32, fmt::Debug, hash::Hash, num::NonZeroU32};
 
-#[derive(Debug)]
 pub struct Octree<T>
 where
     T: Debug + Default + Clone + Eq + PartialEq + Copy + Hash,
