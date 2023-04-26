@@ -137,53 +137,55 @@ where
 
     /// Inserts a new leaf `Node` at the given position, if possible.
     pub(crate) fn insert(&mut self, position: Vector3<u32>, min_dimension: u32, data: T) -> Result<(), Error> {
-        if self.contains(position) {
-            if self.dimension() == min_dimension {
-                self.ty = NodeType::Leaf(data);
-            } else {
-                let ChildInfo {
-                    dimension,
-                    dimension_3d,
-                    octant,
-                } = self.child_info(position).unwrap();
-
-                let bounds = self.child_bounds(dimension_3d, octant);
-
-                let mut node = if self.children[octant as usize].as_ref().is_some() {
-                    self.children[octant as usize].take().unwrap()
-                } else {
-                    Node::<T>::new(bounds)
-                };
-
-                if self.is_leaf() && dimension == min_dimension {
-                    for i in 0..OCTREE_CHILDREN {
-                        if i != octant as usize {
-                            let new_octant = Octant::try_from(i).unwrap();
-                            let bounds = self.child_bounds(dimension_3d, new_octant);
-
-                            let mut new_node = Node::<T>::new(bounds);
-                            new_node.ty = NodeType::Leaf(*self.leaf_data().unwrap());
-
-                            self.children[new_octant as usize] = Box::new(Some(new_node));
-                        }
-                    }
-                }
-
-                node.insert(position, min_dimension, data).unwrap();
-
-                self.children[octant as usize] = Box::new(Some(node));
-                self.ty = NodeType::Internal;
-            }
-
-            self.simplify();
-            Ok(())
-        } else {
-            Err(Error::InvalidPosition {
+        if !self.contains(position) {
+            return Err(Error::InvalidPosition {
                 x: position.x,
                 y: position.y,
                 z: position.z,
-            })
+            });
         }
+
+        if self.dimension() == min_dimension {
+            self.ty = NodeType::Leaf(data);
+            self.simplify();
+            return Ok(());
+        }
+        
+        let ChildInfo {
+            dimension,
+            dimension_3d,
+            octant,
+        } = self.child_info(position).unwrap();
+
+        let bounds = self.child_bounds(dimension_3d, octant);
+
+        let mut node = if self.children[octant as usize].as_ref().is_some() {
+            self.children[octant as usize].take().unwrap()
+        } else {
+            Node::<T>::new(bounds)
+        };
+
+        if self.is_leaf() && dimension == min_dimension {
+            for i in 0..OCTREE_CHILDREN {
+                if i != octant as usize {
+                    let new_octant = Octant::try_from(i).unwrap();
+                    let bounds = self.child_bounds(dimension_3d, new_octant);
+
+                    let mut new_node = Node::<T>::new(bounds);
+                    new_node.ty = NodeType::Leaf(*self.leaf_data().unwrap());
+
+                    self.children[new_octant as usize] = Box::new(Some(new_node));
+                }
+            }
+        }
+
+        node.insert(position, min_dimension, data).unwrap();
+
+        self.children[octant as usize] = Box::new(Some(node));
+        self.ty = NodeType::Internal;
+
+        self.simplify();
+        Ok(())
     }
 
     /// Removes the `Node` at the given position, if possible.
