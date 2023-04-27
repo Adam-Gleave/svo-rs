@@ -20,6 +20,8 @@ pub(crate) use vector::Vector3;
 
 #[cfg(test)]
 mod tests {
+    use bendy::{encoding::ToBencode, decoding::FromBencode};
+
     use super::*;
 
     use core::num::NonZeroU32;
@@ -55,6 +57,30 @@ mod tests {
 
         octree.clear_at([1, 1, 1]).unwrap();
 
+        assert!(matches!(octree.get([1, 1, 1]), Some(0)));
+        assert!(matches!(octree.get([0, 0, 0]), Some(1)));
+    }
+
+
+    #[test]
+    fn basic_serialization() {
+        let mut octree = Octree::<u8>::new(NonZeroU32::new(32).unwrap()).unwrap();
+        octree.insert([0, 0, 0], 1).unwrap();
+        octree.insert([0, 0, 1], 1).unwrap();
+        octree.insert([0, 1, 0], 1).unwrap();
+        octree.insert([0, 1, 1], 1).unwrap();
+        octree.insert([1, 0, 0], 1).unwrap();
+        octree.insert([1, 0, 1], 1).unwrap();
+        octree.insert([1, 1, 0], 1).unwrap();
+        octree.insert([1, 1, 1], 1).unwrap();
+
+        octree.clear_at([1, 1, 1]).unwrap();
+
+        assert!(matches!(octree.get([1, 1, 1]), Some(0)));
+        assert!(matches!(octree.get([0, 0, 0]), Some(1)));
+
+        let serialized = octree.to_bencode().unwrap();
+        let octree: octree::Octree<u8> = Octree::from_bencode(&serialized).unwrap();
         assert!(matches!(octree.get([1, 1, 1]), Some(0)));
         assert!(matches!(octree.get([0, 0, 0]), Some(1)));
     }
