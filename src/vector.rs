@@ -1,6 +1,6 @@
 use core::ops::{Add, Mul};
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct Vector3<T>
 where
     T: Copy,

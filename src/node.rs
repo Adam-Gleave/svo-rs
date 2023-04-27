@@ -93,7 +93,7 @@ impl Octant {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 enum NodeType<T> {
     Leaf(T),
     Internal,

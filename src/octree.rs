@@ -4,11 +4,11 @@ use crate::{Error, Node, Vector3};
 use micromath::F32Ext;
 
 use alloc::boxed::Box;
-use core::{f32, fmt::Debug, hash::Hash, num::NonZeroU32};
+use core::{f32, hash::Hash, num::NonZeroU32};
 
 pub struct Octree<T>
 where
-    T: Debug + Default + Clone + Eq + PartialEq + Copy + Hash + ToBencode + FromBencode,
+    T: Default + Clone + Eq + PartialEq + Copy + Hash + ToBencode + FromBencode,
 {
     dimension: NonZeroU32,
     curr_lod_level: u32,
@@ -19,7 +19,7 @@ where
 
 impl<T> Octree<T>
 where
-    T: Debug + Default + Clone + Eq + PartialEq + Copy + Hash + ToBencode + FromBencode,
+    T: Default + Clone + Eq + PartialEq + Copy + Hash + ToBencode + FromBencode,
 {
     /// Creates a new `Octree<T>` of given dimension.
     ///
@@ -248,7 +248,7 @@ where
 use bendy::encoding::{SingleItemEncoder, ToBencode};
 impl<T> ToBencode for Octree<T>
 where
-    T: Debug + Default + Clone + Eq + PartialEq + Copy + Hash + ToBencode + FromBencode,
+    T: Default + Clone + Eq + PartialEq + Copy + Hash + ToBencode + FromBencode,
 {
     const MAX_DEPTH: usize = 5; //TODO: does this need to include depth of the Node trait implementation?
     fn encode(&self, encoder: SingleItemEncoder) -> Result<(), bendy::encoding::Error> {
@@ -265,7 +265,7 @@ use bendy::decoding::{FromBencode, Object};
 
 impl<T> FromBencode for Octree<T>
 where
-    T: Debug + Default + Clone + Eq + PartialEq + Copy + Hash + ToBencode + FromBencode,
+    T: Default + Clone + Eq + PartialEq + Copy + Hash + ToBencode + FromBencode,
 {
     fn decode_bencode_object(data: Object) -> Result<Self, bendy::decoding::Error> {
         match data {
