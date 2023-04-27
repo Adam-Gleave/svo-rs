@@ -41,3 +41,9 @@ impl<T: Copy> From<[T; 3]> for Vector3<T> {
         }
     }
 }
+
+impl<T: Copy> Into<[T; 3]> for Vector3<T> {
+    fn into(self) -> [T; 3] {
+        [self.x, self.y, self.z]
+    }
+}
