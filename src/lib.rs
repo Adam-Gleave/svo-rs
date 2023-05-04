@@ -20,7 +20,7 @@ pub(crate) use vector::Vector3;
 
 #[cfg(test)]
 mod tests {
-    use bendy::{encoding::ToBencode, decoding::FromBencode};
+    use bendy::{decoding::FromBencode, encoding::ToBencode};
 
     use super::*;
 
@@ -61,6 +61,32 @@ mod tests {
         assert!(matches!(octree.get([0, 0, 0]), Some(1)));
     }
 
+    #[test]
+    fn indexed_access() {
+        const DIM: u32 = 32;
+        let mut octree = Octree::<u32>::new(NonZeroU32::new(DIM as u32).unwrap()).unwrap();
+        for x in 0..DIM {
+            for y in 0..DIM {
+                for z in 0..DIM {
+                    let result = octree.insert([x as u32, y as u32, z as u32], (x + y + z + 1).into());
+                    assert!(result.is_ok());
+                }
+            }
+        }
+
+        for x in 0..DIM {
+            for y in 0..DIM {
+                for z in 0..DIM {
+                    let expected = x + y + z + 1;
+                    let result = octree.get([x as u32, y as u32, z as u32]);
+                    assert!(result.is_some());
+                    if let Some(value) = result {
+                        assert!(*value == expected);
+                    };
+                }
+            }
+        }
+    }
 
     #[test]
     fn basic_serialization() {
