@@ -2,7 +2,7 @@ use crate::{Error, Vector3};
 
 use hashbrown::HashMap;
 
-use alloc::{borrow::ToOwned, boxed::Box, collections::VecDeque, vec::Vec};
+use alloc::{boxed::Box, collections::VecDeque, vec::Vec};
 use core::{
     convert::{TryFrom, TryInto},
     hash::Hash,
@@ -16,7 +16,7 @@ pub(crate) const OCTREE_CHILDREN: usize = 8;
 pub(crate) type Bounds = [Vector3<u32>; BOUNDS_LEN];
 
 #[repr(usize)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Octant {
     LeftRearBase = 0,
     RightRearBase = 1,
@@ -97,7 +97,6 @@ impl Octant {
 enum NodeType<T> {
     Leaf(T),
     Internal,
-    Simplified,
 }
 
 impl<T> Default for NodeType<T> {
@@ -150,7 +149,7 @@ where
             self.simplify();
             return Ok(());
         }
-        
+
         let ChildInfo {
             dimension,
             dimension_3d,
@@ -170,20 +169,16 @@ where
                 if i != octant as usize {
                     let new_octant = Octant::try_from(i).unwrap();
                     let bounds = self.child_bounds(dimension_3d, new_octant);
-
                     let mut new_node = Node::<T>::new(bounds);
                     new_node.ty = NodeType::Leaf(*self.leaf_data().unwrap());
-
                     self.children[new_octant as usize] = Box::new(Some(new_node));
                 }
             }
         }
 
         node.insert(position, min_dimension, data).unwrap();
-
         self.children[octant as usize] = Box::new(Some(node));
         self.ty = NodeType::Internal;
-
         self.simplify();
         Ok(())
     }
@@ -236,25 +231,23 @@ where
 
     /// Gets data from a `Node` at the given position, if possible.
     pub(crate) fn get(&self, position: Vector3<u32>) -> Option<&T> {
-        if self.contains(position) {
-            return match &self.ty {
-                NodeType::Leaf(data) => Some(data),
-                _ => {
-                    let ChildInfo {
-                        dimension: _,
-                        dimension_3d: _,
-                        octant,
-                    } = self.child_info(position).unwrap();
-
-                    match self.children[octant as usize].deref() {
-                        Some(child) => child.get(position),
-                        _ => None,
-                    }
-                }
-            };
+        if !self.contains(position) {
+            return None;
         }
-
-        None
+        return match &self.ty {
+            NodeType::Leaf(data) => Some(data),
+            _ => {
+                let ChildInfo {
+                    dimension: _,
+                    dimension_3d: _,
+                    octant,
+                } = self.child_info(position).unwrap();
+                match self.children[octant as usize].deref() {
+                    Some(child) => child.get(position),
+                    _ => None,
+                }
+            }
+        };
     }
 
     /// Simplifies the `Node`.
@@ -263,7 +256,6 @@ where
     /// and mark the `Node` as a leaf containing that data.
     pub(crate) fn simplify(&mut self) -> bool {
         let mut data = None;
-
         for i in 0..OCTREE_CHILDREN {
             if let Some(child) = self.children[i].deref() {
                 if child.is_leaf() {
@@ -277,16 +269,15 @@ where
                     } else if *data.as_ref().unwrap() != leaf_data.unwrap() {
                         return false;
                     }
+                } else {
+                    return false;
                 }
-            } else if self.ty == NodeType::Internal {
+            } else {
                 return false;
             }
         }
 
-        if data.is_some() {
-            self.ty = NodeType::Leaf((*data.unwrap()).clone());
-        }
-
+        self.ty = NodeType::Leaf((*data.unwrap()).clone());
         self.children.fill(Box::new(None));
         true
     }
@@ -450,7 +441,6 @@ where
                 //emit Node without children
                 match node_ref.ty {
                     NodeType::Internal => e.emit_str("###iNtErNaL###")?,
-                    NodeType::Simplified => e.emit_str("###SiMpLiFiEd###")?,
                     NodeType::Leaf(d) => {
                         e.emit_str("###lEaF###")?;
                         e.emit(d)?
@@ -501,10 +491,9 @@ where
                     let mut is_leaf = false;
                     let mut ty = match String::decode_bencode_object(list.next_object()?.unwrap())?.as_str() {
                         "###iNtErNaL###" => Ok(NodeType::Internal),
-                        "###SiMpLiFiEd###" => Ok(NodeType::Simplified),
                         "###lEaF###" => {
                             is_leaf = true;
-                            Ok(NodeType::Simplified)
+                            Ok(NodeType::Internal)
                         }
                         s => Err(bendy::decoding::Error::unexpected_token(
                             "NodeType markers",
