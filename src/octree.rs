@@ -4,12 +4,11 @@ use crate::{Error, Node, Vector3};
 use micromath::F32Ext;
 
 use alloc::boxed::Box;
-use core::{f32, fmt::Debug, hash::Hash, num::NonZeroU32};
+use core::{f32, hash::Hash, num::NonZeroU32};
 
-#[derive(Debug)]
 pub struct Octree<T>
 where
-    T: Debug + Default + Clone + Eq + PartialEq + Copy + Hash,
+    T: Default + Clone + Eq + PartialEq + Copy + Hash + ToBencode + FromBencode,
 {
     dimension: NonZeroU32,
     curr_lod_level: u32,
@@ -20,7 +19,7 @@ where
 
 impl<T> Octree<T>
 where
-    T: Debug + Default + Clone + Eq + PartialEq + Copy + Hash,
+    T: Default + Clone + Eq + PartialEq + Copy + Hash + ToBencode + FromBencode,
 {
     /// Creates a new `Octree<T>` of given dimension.
     ///
@@ -243,5 +242,76 @@ where
     /// ```
     pub fn contains(&self, position: [u32; 3]) -> bool {
         self.root.contains(position.into())
+    }
+}
+
+use bendy::encoding::{SingleItemEncoder, ToBencode};
+impl<T> ToBencode for Octree<T>
+where
+    T: Default + Clone + Eq + PartialEq + Copy + Hash + ToBencode + FromBencode,
+{
+    const MAX_DEPTH: usize = 5; //TODO: does this need to include depth of the Node trait implementation?
+    fn encode(&self, encoder: SingleItemEncoder) -> Result<(), bendy::encoding::Error> {
+        encoder.emit_list(|e| {
+            e.emit_int(u32::from(self.dimension))?;
+            e.emit_int(self.curr_lod_level)?;
+            e.emit_int(self.max_lod_level)?;
+            e.emit_int(self.min_dimension)?;
+            e.emit(self.root.clone()) //TODO: Does this really need to be cloned?
+        })
+    }
+}
+use bendy::decoding::{FromBencode, Object};
+
+impl<T> FromBencode for Octree<T>
+where
+    T: Default + Clone + Eq + PartialEq + Copy + Hash + ToBencode + FromBencode,
+{
+    fn decode_bencode_object(data: Object) -> Result<Self, bendy::decoding::Error> {
+        match data {
+            Object::List(mut list) => {
+                let dimension = match list.next_object()?.unwrap() {
+                    Object::Integer(i) => Ok(i.parse::<NonZeroU32>().unwrap()),
+                    _ => Err(bendy::decoding::Error::unexpected_token(
+                        "Integer Octree dimension",
+                        "Something else",
+                    )),
+                }?;
+
+                let curr_lod_level = match list.next_object()?.unwrap() {
+                    Object::Integer(i) => Ok(i.parse::<u32>().unwrap()),
+                    _ => Err(bendy::decoding::Error::unexpected_token(
+                        "Integer Octree curr_lod_level",
+                        "Something else",
+                    )),
+                }?;
+
+                let max_lod_level = match list.next_object()?.unwrap() {
+                    Object::Integer(i) => Ok(i.parse::<u32>().unwrap()),
+                    _ => Err(bendy::decoding::Error::unexpected_token(
+                        "Integer Octree max_lod_level",
+                        "Something else",
+                    )),
+                }?;
+
+                let min_dimension = match list.next_object()?.unwrap() {
+                    Object::Integer(i) => Ok(i.parse::<u32>().unwrap()),
+                    _ => Err(bendy::decoding::Error::unexpected_token(
+                        "Integer Octree min_dimension",
+                        "Something else",
+                    )),
+                }?;
+
+                let root = Node::<T>::decode_bencode_object(list.next_object()?.unwrap())?;
+                Ok(Octree {
+                    dimension,
+                    curr_lod_level,
+                    max_lod_level,
+                    min_dimension,
+                    root: Box::new(root),
+                })
+            }
+            _ => Err(bendy::decoding::Error::unexpected_token("List", "not List")),
+        }
     }
 }
