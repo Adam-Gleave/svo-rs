@@ -10,6 +10,7 @@ pub struct Octree<T>
 where
     T: Default + Clone + Eq + PartialEq + Copy + Hash + ToBencode + FromBencode,
 {
+    pub auto_simplify: bool,
     dimension: NonZeroU32,
     curr_lod_level: u32,
     max_lod_level: u32,
@@ -48,6 +49,7 @@ where
                 curr_lod_level: 1,
                 max_lod_level: max_depth.round() as u32,
                 min_dimension: 1,
+                auto_simplify: false,
                 root: Box::new(Node::<T>::new([
                     Vector3::from([0, 0, 0]),
                     Vector3::from([dimension.get(), dimension.get(), dimension.get()]),
@@ -72,7 +74,7 @@ where
     /// assert!(res.is_ok());
     /// ```
     pub fn insert(&mut self, position: [u32; 3], data: T) -> Result<(), Error> {
-        self.root.insert(position.into(), self.min_dimension, data)
+        self.root.insert(position.into(), self.min_dimension, self.auto_simplify, data)
     }
 
     /// Retrieves data of type `T` from the given position in the `Octree`.
@@ -243,6 +245,45 @@ where
     pub fn contains(&self, position: [u32; 3]) -> bool {
         self.root.contains(position.into())
     }
+
+    /// Simplifies the nodes wherever possible
+    ///
+    /// Returns with wether or not the root Node could be simplified
+    ///
+    /// # Example
+    /// ```
+    /// # use svo_rs::{Error, Octree};
+    /// # use core::num::NonZeroU32;
+    /// #
+    /// const DIM: u32 = 32;
+    /// let mut octree = Octree::<u32>::new(NonZeroU32::new(DIM as u32).unwrap()).unwrap();
+    /// let data_field = |x: u32, y: u32, z: u32| -> u32 {
+    ///     5//(((x as f32).sin() + (y as f32).sin() + (z as f32).sin()).min(-1.) * -100.) as u32
+    /// };
+    /// for x in 0..DIM {
+    ///     for y in 0..DIM {
+    ///         for z in 0..DIM {
+    ///             let result = octree.insert([x as u32, y as u32, z as u32], data_field(x, y, z));
+    ///             assert!(result.is_ok());
+    ///         }
+    ///     }
+    /// }
+    /// assert!(octree.simplify());
+    /// for x in 0..DIM {
+    ///     for y in 0..DIM {
+    ///         for z in 0..DIM {
+    ///             let result = octree.get([x as u32, y as u32, z as u32]);
+    ///             assert!(result.is_some());
+    ///             if let Some(value) = result {
+    ///                 assert_eq!(*value, data_field(x, y, z));
+    ///             };
+    ///         }
+    ///     }
+    /// }
+    /// ``` 
+    pub fn simplify(&mut self) -> bool{
+        self.root.simplify_recursive()
+    }
 }
 
 use bendy::encoding::{SingleItemEncoder, ToBencode};
@@ -257,6 +298,7 @@ where
             e.emit_int(self.curr_lod_level)?;
             e.emit_int(self.max_lod_level)?;
             e.emit_int(self.min_dimension)?;
+            e.emit_int(self.auto_simplify as i8)?;
             e.emit(self.root.clone()) //TODO: Does this really need to be cloned?
         })
     }
@@ -302,12 +344,21 @@ where
                     )),
                 }?;
 
+                let auto_simplify = match list.next_object()?.unwrap() {
+                    Object::Integer(i) => Ok(i.parse::<u8>().unwrap()),
+                    _ => Err(bendy::decoding::Error::unexpected_token(
+                        "Boolean for octree Auto simplify",
+                        "Something else",
+                    )),
+                }?;
+
                 let root = Node::<T>::decode_bencode_object(list.next_object()?.unwrap())?;
                 Ok(Octree {
                     dimension,
                     curr_lod_level,
                     max_lod_level,
                     min_dimension,
+                    auto_simplify: 0 < auto_simplify,
                     root: Box::new(root),
                 })
             }
