@@ -135,7 +135,13 @@ where
     }
 
     /// Inserts a new leaf `Node` at the given position, if possible.
-    pub(crate) fn insert(&mut self, position: Vector3<u32>, min_dimension: u32, data: T) -> Result<(), Error> {
+    pub(crate) fn insert(
+        &mut self,
+        position: Vector3<u32>,
+        min_dimension: u32,
+        do_simplify: bool,
+        data: T,
+    ) -> Result<(), Error> {
         if !self.contains(position) {
             return Err(Error::InvalidPosition {
                 x: position.x,
@@ -176,10 +182,12 @@ where
             }
         }
 
-        node.insert(position, min_dimension, data).unwrap();
+        node.insert(position, min_dimension, do_simplify, data).unwrap();
         self.children[octant as usize] = Box::new(Some(node));
         self.ty = NodeType::Internal;
-        self.simplify();
+        if do_simplify {
+            self.simplify();
+        }
         Ok(())
     }
 
@@ -280,6 +288,32 @@ where
         self.ty = NodeType::Leaf((*data.unwrap()).clone());
         self.children.fill(Box::new(None));
         true
+    }
+
+    /// Simplifies node and children recursively
+    pub(crate) fn simplify_recursive(&mut self) -> bool {
+        let mut leaf_children = 0;
+        for i in 0..OCTREE_CHILDREN {
+            if let Some(child) = self.children[i].deref_mut() {
+                match child.ty {
+                    NodeType::Internal => {
+                        if child.simplify_recursive() {
+                            leaf_children += 1
+                        }
+                    }
+                    NodeType::Leaf(_) => {
+                        leaf_children += 1;
+                    }
+                };
+            } else {
+                return false;
+            }
+        }
+        if leaf_children == OCTREE_CHILDREN {
+            self.simplify()
+        } else {
+            false
+        }
     }
 
     /// Returns a higher LOD of the current `Node`.
@@ -545,7 +579,6 @@ where
                 // for n in all_nodes.iter() {
                 //     let d_ty = match n.0.as_ref().unwrap().ty {
                 //         NodeType::Internal => format!("INTERNAL"),
-                //         NodeType::Simplified => format!("SIMPLIFIED"),
                 //         NodeType::Leaf(d) => format!("{:?}", d),
                 //     };
 
