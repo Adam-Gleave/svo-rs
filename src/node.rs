@@ -152,7 +152,6 @@ where
 
         if self.dimension() == min_dimension {
             self.ty = NodeType::Leaf(data);
-            self.simplify();
             return Ok(());
         }
 
