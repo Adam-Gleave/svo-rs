@@ -6,7 +6,7 @@ use alloc::{boxed::Box, collections::VecDeque, vec::Vec};
 use core::{
     convert::{TryFrom, TryInto},
     hash::Hash,
-    ops::{Deref, DerefMut},
+    ops::Deref,
 };
 
 const BOUNDS_LEN: usize = 2;
@@ -28,20 +28,19 @@ enum Octant {
     RightFrontTop = 7,
 }
 
-impl TryFrom<usize> for Octant {
-    type Error = Error;
 
-    fn try_from(value: usize) -> Result<Self, Self::Error> {
+impl From<usize> for Octant {
+    fn from(value: usize) -> Self {
         match value {
-            0 => Ok(Self::LeftRearBase),
-            1 => Ok(Self::RightRearBase),
-            2 => Ok(Self::LeftRearTop),
-            3 => Ok(Self::RightRearTop),
-            4 => Ok(Self::LeftFrontBase),
-            5 => Ok(Self::RightFrontBase),
-            6 => Ok(Self::LeftFrontTop),
-            7 => Ok(Self::RightFrontTop),
-            _ => Err(Error::InvalidOctant(value)),
+            0 => Self::LeftRearBase,
+            1 => Self::RightRearBase,
+            2 => Self::LeftRearTop,
+            3 => Self::RightRearTop,
+            4 => Self::LeftFrontBase,
+            5 => Self::RightFrontBase,
+            6 => Self::LeftFrontTop,
+            7 => Self::RightFrontTop,
+            _ => unreachable!("Unexpected Octant number"),
         }
     }
 }
@@ -118,7 +117,7 @@ where
 {
     ty: NodeType<T>,
     bounds: Bounds,
-    children: [Box<Option<Node<T>>>; OCTREE_CHILDREN],
+    children: [Option<Box<Node<T>>>; OCTREE_CHILDREN],
 }
 
 impl<T> Node<T>
@@ -163,26 +162,26 @@ where
 
         let bounds = self.child_bounds(dimension_3d, octant);
 
-        let mut node = if self.children[octant as usize].as_ref().is_some() {
+        let mut node = if self.children[octant as usize].is_some() {
             self.children[octant as usize].take().unwrap()
         } else {
-            Node::<T>::new(bounds)
+            Box::new(Node::<T>::new(bounds))
         };
 
         if self.is_leaf() && dimension == min_dimension {
             for i in 0..OCTREE_CHILDREN {
                 if i != octant as usize {
-                    let new_octant = Octant::try_from(i).unwrap();
+                    let new_octant = Octant::from(i);
                     let bounds = self.child_bounds(dimension_3d, new_octant);
                     let mut new_node = Node::<T>::new(bounds);
                     new_node.ty = NodeType::Leaf(*self.leaf_data().unwrap());
-                    self.children[new_octant as usize] = Box::new(Some(new_node));
+                    self.children[new_octant as usize] = Some(Box::new(new_node));
                 }
             }
         }
 
         node.insert(position, min_dimension, do_simplify, data).unwrap();
-        self.children[octant as usize] = Box::new(Some(node));
+        self.children[octant as usize] = Some(node);
         self.ty = NodeType::Internal;
         if do_simplify {
             self.simplify();
@@ -195,35 +194,21 @@ where
         if self.contains(position) {
             let ChildInfo {
                 dimension,
-                dimension_3d,
+                dimension_3d: _,
                 octant,
             } = self.child_info(position).unwrap();
 
             if self.is_leaf() && dimension == min_dimension {
                 for i in 0..OCTREE_CHILDREN {
-                    let (octant, data) = if i != octant as usize {
-                        (Octant::try_from(i).unwrap(), *self.leaf_data().unwrap())
-                    } else {
-                        (octant, Default::default())
-                    };
-
-                    let bounds = self.child_bounds(dimension_3d, octant);
-                    let mut node = Node::<T>::new(bounds);
-                    node.ty = NodeType::Leaf(data);
-
-                    self.children[i].deref_mut().replace(node);
+                    self.children[i] = None;
                 }
             } else if self.children[octant as usize].as_ref().is_some() {
-                let mut child = self.children[octant as usize].take().unwrap();
-                child.clear(position, min_dimension).unwrap();
-
-                child.ty = if self.is_leaf() || dimension == min_dimension {
+                self.children[octant as usize].as_mut().unwrap().clear(position, min_dimension).unwrap();
+                self.children[octant as usize].as_mut().unwrap().ty = if self.is_leaf() || dimension == min_dimension {
                     NodeType::Leaf(Default::default())
                 } else {
                     NodeType::Internal
                 };
-
-                self.children[octant as usize].deref_mut().replace(child);
             }
 
             Ok(())
@@ -249,7 +234,7 @@ where
                     dimension_3d: _,
                     octant,
                 } = self.child_info(position).unwrap();
-                match self.children[octant as usize].deref() {
+                match &self.children[octant as usize] {
                     Some(child) => child.get(position),
                     _ => None,
                 }
@@ -264,16 +249,16 @@ where
     pub(crate) fn simplify(&mut self) -> bool {
         let mut data = None;
         for i in 0..OCTREE_CHILDREN {
-            if let Some(child) = self.children[i].deref() {
+            if let Some(child) = &self.children[i] {
                 if child.is_leaf() {
                     let leaf_data = child.leaf_data();
 
                     if data.as_ref().is_none() {
-                        data = match &child.ty {
+                        data = match child.ty {
                             NodeType::Leaf(d) => Some(d),
                             _ => panic!("Leaf Node `ty` member is not NodeType::Leaf(T) when it should be!"),
                         };
-                    } else if *data.as_ref().unwrap() != leaf_data.unwrap() {
+                    } else if *data.as_ref().unwrap() != *leaf_data.unwrap() {
                         return false;
                     }
                 } else {
@@ -284,8 +269,8 @@ where
             }
         }
 
-        self.ty = NodeType::Leaf((*data.unwrap()).clone());
-        self.children.fill(Box::new(None));
+        self.ty = NodeType::Leaf((data.unwrap()).clone());
+        self.children = [None, None, None, None, None, None, None, None];
         true
     }
 
@@ -293,7 +278,7 @@ where
     pub(crate) fn simplify_recursive(&mut self) -> bool {
         let mut leaf_children = 0;
         for i in 0..OCTREE_CHILDREN {
-            if let Some(child) = self.children[i].deref_mut() {
+            if let Some(ref mut child) = &mut self.children[i] {
                 match child.ty {
                     NodeType::Internal => {
                         if child.simplify_recursive() {
@@ -321,7 +306,7 @@ where
     /// destroy all children, and mark the `Node` as a leaf containing that data.
     pub(crate) fn lod(&mut self) {
         let mut all_data = Vec::<T>::new();
-        for (_i, c) in self.children.iter_mut().enumerate().map(|(i, c)| (i, c.deref_mut())) {
+        for (_i, c) in self.children.iter_mut().enumerate().map(|(i, c)|(i, c)) {
             if let Some(c) = c {
                 if c.is_leaf() {
                     let leaf_data = c.leaf_data();
@@ -349,7 +334,7 @@ where
             self.ty = NodeType::Leaf(counts.into_iter().max_by_key(|(_, count)| *count).unwrap().0);
         }
 
-        self.children.fill(Box::new(None));
+        self.children.fill(None);
     }
 
     /// Returns the dimension of the `Node`.
@@ -625,8 +610,8 @@ where
                         //except for the root Node
                         if 0 != *current_node {
                             // move box into its parent Node
-                            let boxed = Box::new(std::mem::replace(&mut all_nodes[*current_node].0, None)); //Move Node into a box
-                            all_nodes[*current_node_parent].0.as_mut().unwrap().children[*parent_child_index] = boxed;
+                            let node = std::mem::replace(&mut all_nodes[*current_node].0, None).unwrap(); //Move Node into a box
+                            all_nodes[*current_node_parent].0.as_mut().unwrap().children[*parent_child_index] = Some(Box::new(node));
                         }
                         stack.pop_back();
                     }
