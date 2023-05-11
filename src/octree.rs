@@ -149,7 +149,7 @@ where
 
     /// Effectively increases the leaf dimension of the `Octree` and simplifies where possible.
     ///
-    /// Moves the leaf dimension up a level, and all leaves are formed by the most common data of their
+    /// Moves the leaf dimension down a level, and all leaves are formed by the most common data of their
     /// original children.
     ///
     /// # Example

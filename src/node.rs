@@ -28,7 +28,6 @@ enum Octant {
     RightFrontTop = 7,
 }
 
-
 impl From<usize> for Octant {
     fn from(value: usize) -> Self {
         match value {
@@ -160,14 +159,6 @@ where
             octant,
         } = self.child_info(position).unwrap();
 
-        let bounds = self.child_bounds(dimension_3d, octant);
-
-        let mut node = if self.children[octant as usize].is_some() {
-            self.children[octant as usize].take().unwrap()
-        } else {
-            Box::new(Node::<T>::new(bounds))
-        };
-
         if self.is_leaf() && dimension == min_dimension {
             for i in 0..OCTREE_CHILDREN {
                 if i != octant as usize {
@@ -180,8 +171,17 @@ where
             }
         }
 
-        node.insert(position, min_dimension, do_simplify, data).unwrap();
-        self.children[octant as usize] = Some(node);
+        let bounds = self.child_bounds(dimension_3d, octant);
+        if let Some(ref mut child) = &mut self.children[octant as usize] {
+            child
+                .as_mut()
+                .insert(position, min_dimension, do_simplify, data)
+                .unwrap();
+        } else {
+            let mut node = Box::new(Node::<T>::new(bounds));
+            node.insert(position, min_dimension, do_simplify, data).unwrap();
+            self.children[octant as usize] = Some(node);
+        };
         self.ty = NodeType::Internal;
         if do_simplify {
             self.simplify();
@@ -203,7 +203,11 @@ where
                     self.children[i] = None;
                 }
             } else if self.children[octant as usize].as_ref().is_some() {
-                self.children[octant as usize].as_mut().unwrap().clear(position, min_dimension).unwrap();
+                self.children[octant as usize]
+                    .as_mut()
+                    .unwrap()
+                    .clear(position, min_dimension)
+                    .unwrap();
                 self.children[octant as usize].as_mut().unwrap().ty = if self.is_leaf() || dimension == min_dimension {
                     NodeType::Leaf(Default::default())
                 } else {
@@ -306,7 +310,7 @@ where
     /// destroy all children, and mark the `Node` as a leaf containing that data.
     pub(crate) fn lod(&mut self) {
         let mut all_data = Vec::<T>::new();
-        for (_i, c) in self.children.iter_mut().enumerate().map(|(i, c)|(i, c)) {
+        for (_i, c) in self.children.iter_mut().enumerate().map(|(i, c)| (i, c)) {
             if let Some(c) = c {
                 if c.is_leaf() {
                     let leaf_data = c.leaf_data();
@@ -611,7 +615,8 @@ where
                         if 0 != *current_node {
                             // move box into its parent Node
                             let node = std::mem::replace(&mut all_nodes[*current_node].0, None).unwrap(); //Move Node into a box
-                            all_nodes[*current_node_parent].0.as_mut().unwrap().children[*parent_child_index] = Some(Box::new(node));
+                            all_nodes[*current_node_parent].0.as_mut().unwrap().children[*parent_child_index] =
+                                Some(Box::new(node));
                         }
                         stack.pop_back();
                     }
