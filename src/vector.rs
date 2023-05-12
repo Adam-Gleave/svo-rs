@@ -1,6 +1,6 @@
 use core::ops::{Add, Mul};
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct Vector3<T>
 where
     T: Copy,
@@ -39,5 +39,11 @@ impl<T: Copy> From<[T; 3]> for Vector3<T> {
             y: v[1],
             z: v[2],
         }
+    }
+}
+
+impl<T: Copy> Into<[T; 3]> for Vector3<T> {
+    fn into(self) -> [T; 3] {
+        [self.x, self.y, self.z]
     }
 }
