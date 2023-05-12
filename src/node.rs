@@ -4,16 +4,11 @@ use hashbrown::HashMap;
 
 use alloc::{boxed::Box, collections::VecDeque, vec::Vec};
 use core::{
-    convert::{TryFrom, TryInto},
     hash::Hash,
     ops::Deref,
 };
 
-const BOUNDS_LEN: usize = 2;
-
 pub(crate) const OCTREE_CHILDREN: usize = 8;
-
-pub(crate) type Bounds = [Vector3<u32>; BOUNDS_LEN];
 
 #[repr(usize)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -27,7 +22,6 @@ enum Octant {
     LeftFrontTop = 6,
     RightFrontTop = 7,
 }
-
 
 impl From<usize> for Octant {
     fn from(value: usize) -> Self {
@@ -116,7 +110,8 @@ where
     T: Default + Eq + PartialEq + Clone + Copy + Hash,
 {
     ty: NodeType<T>,
-    bounds: Bounds,
+    min_position: Vector3<u32>,
+    dimension: u32,
     children: [Option<Box<Node<T>>>; OCTREE_CHILDREN],
 }
 
@@ -125,10 +120,11 @@ where
     T: Default + Eq + PartialEq + Clone + Copy + Hash,
 {
     /// Creates a new `Node<T>` with the given bounds.
-    pub(crate) fn new(bounds: Bounds) -> Self {
+    pub(crate) fn new(min_position: Vector3<u32>, dimension: u32) -> Self {
         Self {
             ty: NodeType::Leaf(Default::default()),
-            bounds,
+            min_position,
+            dimension,
             ..Default::default()
         }
     }
@@ -149,39 +145,42 @@ where
             });
         }
 
-        if self.dimension() == min_dimension {
+        if self.dimension == min_dimension {
             self.ty = NodeType::Leaf(data);
             return Ok(());
         }
 
         let ChildInfo {
-            dimension,
+            dimension: child_dimension,
             dimension_3d,
             octant,
         } = self.child_info(position).unwrap();
 
-        let bounds = self.child_bounds(dimension_3d, octant);
-
-        let mut node = if self.children[octant as usize].is_some() {
-            self.children[octant as usize].take().unwrap()
-        } else {
-            Box::new(Node::<T>::new(bounds))
-        };
-
-        if self.is_leaf() && dimension == min_dimension {
+        if self.is_leaf() && child_dimension == min_dimension {
             for i in 0..OCTREE_CHILDREN {
                 if i != octant as usize {
                     let new_octant = Octant::from(i);
-                    let bounds = self.child_bounds(dimension_3d, new_octant);
-                    let mut new_node = Node::<T>::new(bounds);
+                    let mut new_node =
+                        Node::<T>::new(self.child_min_position(dimension_3d, new_octant), child_dimension);
                     new_node.ty = NodeType::Leaf(*self.leaf_data().unwrap());
                     self.children[new_octant as usize] = Some(Box::new(new_node));
                 }
             }
         }
 
-        node.insert(position, min_dimension, do_simplify, data).unwrap();
-        self.children[octant as usize] = Some(node);
+        if let Some(ref mut child) = &mut self.children[octant as usize] {
+            child
+                .as_mut()
+                .insert(position, min_dimension, do_simplify, data)
+                .unwrap();
+        } else {
+            let mut node = Box::new(Node::<T>::new(
+                self.child_min_position(dimension_3d, octant),
+                child_dimension,
+            ));
+            node.insert(position, min_dimension, do_simplify, data).unwrap();
+            self.children[octant as usize] = Some(node);
+        };
         self.ty = NodeType::Internal;
         if do_simplify {
             self.simplify();
@@ -203,7 +202,11 @@ where
                     self.children[i] = None;
                 }
             } else if self.children[octant as usize].as_ref().is_some() {
-                self.children[octant as usize].as_mut().unwrap().clear(position, min_dimension).unwrap();
+                self.children[octant as usize]
+                    .as_mut()
+                    .unwrap()
+                    .clear(position, min_dimension)
+                    .unwrap();
                 self.children[octant as usize].as_mut().unwrap().ty = if self.is_leaf() || dimension == min_dimension {
                     NodeType::Leaf(Default::default())
                 } else {
@@ -306,7 +309,7 @@ where
     /// destroy all children, and mark the `Node` as a leaf containing that data.
     pub(crate) fn lod(&mut self) {
         let mut all_data = Vec::<T>::new();
-        for (_i, c) in self.children.iter_mut().enumerate().map(|(i, c)|(i, c)) {
+        for (_i, c) in self.children.iter_mut().enumerate().map(|(i, c)| (i, c)) {
             if let Some(c) = c {
                 if c.is_leaf() {
                     let leaf_data = c.leaf_data();
@@ -339,17 +342,17 @@ where
 
     /// Returns the dimension of the `Node`.
     pub(crate) fn dimension(&self) -> u32 {
-        (self.bounds[0].x as i32 - self.bounds[1].x as i32).abs() as u32
+        self.dimension
     }
 
     /// Returns whether the `Node` contains the given position.
     pub(crate) fn contains(&self, position: Vector3<u32>) -> bool {
-        position.x >= self.bounds[0].x
-            && position.x < self.bounds[1].x
-            && position.y >= self.bounds[0].y
-            && position.y < self.bounds[1].y
-            && position.z >= self.bounds[0].z
-            && position.z < self.bounds[1].z
+        position.x >= self.min_position.x
+            && position.x < self.min_position.x + self.dimension
+            && position.y >= self.min_position.y
+            && position.y < self.min_position.y + self.dimension
+            && position.z >= self.min_position.z
+            && position.z < self.min_position.z + self.dimension
     }
 
     /// Get leaf data from this `Node`.
@@ -362,9 +365,9 @@ where
 
     fn child_info(&self, position: Vector3<u32>) -> Option<ChildInfo> {
         if self.contains(position) {
-            let dimension = self.dimension() / 2;
+            let dimension = self.dimension / 2;
             let dimension_3d = Vector3::from([dimension, dimension, dimension]);
-            let midpoint = self.min_position() + dimension_3d;
+            let midpoint = self.min_position + dimension_3d;
             let octant = Octant::vector_diff(midpoint, position);
 
             Some(ChildInfo {
@@ -377,21 +380,14 @@ where
         }
     }
 
-    fn child_bounds(&self, dimension_3d: Vector3<u32>, octant: Octant) -> Bounds {
-        let lower = self.min_position() + dimension_3d.component_mul(&octant.offset());
-        let upper = lower + dimension_3d;
-
-        [lower, upper]
+    fn child_min_position(&self, dimension_3d: Vector3<u32>, octant: Octant) -> Vector3<u32> {
+        self.min_position + dimension_3d.component_mul(&octant.offset())
     }
 
     fn child_count(&self) -> usize {
         self.children
             .iter()
             .fold(0, |acc, child| if child.deref().is_some() { acc + 1 } else { acc })
-    }
-
-    fn min_position(&self) -> Vector3<u32> {
-        self.bounds[0]
     }
 
     fn is_leaf(&self) -> bool {
@@ -439,7 +435,7 @@ where
         //         NodeType::Leaf(d) => format!("{:?}", d),
         //     };
 
-        //     let d_bounds = format!("{:?};{:?}", n.0.bounds[0], n.0.bounds[1]);
+        //     let d_bounds = format!("{:?};{:?}", n.0.min_position, n.0.dimension());
         //     let mut d_children = "[".to_owned();
         //     for c in n.1 {
         //         match c {
@@ -464,14 +460,15 @@ where
                         e.emit(d)?
                     }
                 }
-                //emit bounds
-                let mut bytes = Vec::<u8>::with_capacity(BOUNDS_LEN * 3);
-                node_ref.bounds.iter().for_each(|vec| {
-                    Into::<[u32; 3]>::into(*vec)
-                        .iter()
-                        .for_each(|b| bytes.extend_from_slice(&b.to_be_bytes()));
-                });
-                e.emit_bytes(&bytes)?;
+
+                //emit min_position
+                e.emit_int(node_ref.min_position.x)?;
+                e.emit_int(node_ref.min_position.y)?;
+                e.emit_int(node_ref.min_position.z)?;
+
+                //emit dimension
+                e.emit_int(node_ref.dimension)?;
+
                 //emit Node child array index values
                 e.emit_list(|e2| {
                     // the value 0 can be used safely here, becaue the root node is at index 0; and it's child for noone
@@ -521,18 +518,34 @@ where
                     if is_leaf {
                         ty = NodeType::<T>::Leaf(T::decode_bencode_object(list.next_object()?.unwrap())?)
                     }
-                    let bounds = match list.next_object()?.unwrap() {
-                        Object::Bytes(b) => {
-                            let bounds_vector: Vec<[u32; 3]> = b
-                                .chunks(4)
-                                .map(|c| u32::from_be_bytes(c.try_into().unwrap()))
-                                .collect::<Vec<_>>()
-                                .chunks(3)
-                                .map(|c| <[_; 3]>::try_from(c).unwrap())
-                                .collect();
-                            Ok(bounds_vector)
-                        }
-                        _ => Err(bendy::decoding::Error::unexpected_token("Bytes", "not Bytes")),
+                    let x = match list.next_object()?.unwrap() {
+                        Object::Integer(i) => Ok(i.parse::<u32>().unwrap()),
+                        _ => Err(bendy::decoding::Error::unexpected_token(
+                            "Integer for Node min_position x",
+                            "not Integer",
+                        )),
+                    }?;
+                    let y = match list.next_object()?.unwrap() {
+                        Object::Integer(i) => Ok(i.parse::<u32>().unwrap()),
+                        _ => Err(bendy::decoding::Error::unexpected_token(
+                            "Integer for Node min_position y",
+                            "not Integer",
+                        )),
+                    }?;
+                    let z = match list.next_object()?.unwrap() {
+                        Object::Integer(i) => Ok(i.parse::<u32>().unwrap()),
+                        _ => Err(bendy::decoding::Error::unexpected_token(
+                            "Integer for Node min_position z",
+                            "not Integer",
+                        )),
+                    }?;
+                    let min_position = Vector3::<u32> { x, y, z };
+                    let dimension = match list.next_object()?.unwrap() {
+                        Object::Integer(i) => Ok(i.parse::<u32>().unwrap()),
+                        _ => Err(bendy::decoding::Error::unexpected_token(
+                            "Integer for Node dimension",
+                            "not Integer",
+                        )),
                     }?;
                     let mut children: [Option<usize>; OCTREE_CHILDREN] = [None; OCTREE_CHILDREN];
                     match list.next_object()?.unwrap() {
@@ -551,7 +564,8 @@ where
                     all_nodes.push((
                         Some(Node::<T> {
                             ty,
-                            bounds: [bounds[0].into(), bounds[1].into()],
+                            min_position,
+                            dimension,
                             ..Default::default()
                         }),
                         children,
@@ -568,8 +582,8 @@ where
 
                 //     let d_bounds = format!(
                 //         "{:?};{:?}",
-                //         n.0.as_ref().unwrap().bounds[0],
-                //         n.0.as_ref().unwrap().bounds[1]
+                //         n.0.as_ref().unwrap().min_position,
+                //         n.0.as_ref().unwrap().dimension()
                 //     );
                 //     let mut d_children = "[".to_owned();
                 //     for c in n.1 {
@@ -611,7 +625,8 @@ where
                         if 0 != *current_node {
                             // move box into its parent Node
                             let node = std::mem::replace(&mut all_nodes[*current_node].0, None).unwrap(); //Move Node into a box
-                            all_nodes[*current_node_parent].0.as_mut().unwrap().children[*parent_child_index] = Some(Box::new(node));
+                            all_nodes[*current_node_parent].0.as_mut().unwrap().children[*parent_child_index] =
+                                Some(Box::new(node));
                         }
                         stack.pop_back();
                     }

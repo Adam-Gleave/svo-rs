@@ -50,10 +50,7 @@ where
                 max_lod_level: max_depth.round() as u32,
                 min_dimension: 1,
                 auto_simplify: false,
-                root: Box::new(Node::<T>::new([
-                    Vector3::from([0, 0, 0]),
-                    Vector3::from([dimension.get(), dimension.get(), dimension.get()]),
-                ])),
+                root: Box::new(Node::<T>::new(Vector3::from([0, 0, 0]), dimension.get())),
             })
         } else {
             Err(Error::InvalidDimension(dimension.into()))
@@ -141,15 +138,12 @@ where
     /// assert!(matches!(octree.get([0, 0, 1]), Some(0)));
     /// ```
     pub fn clear(&mut self) {
-        self.root = Box::new(Node::<T>::new([
-            Vector3::from([0, 0, 0]),
-            Vector3::from([self.dimension.get(), self.dimension.get(), self.dimension.get()]),
-        ]));
+        self.root = Box::new(Node::<T>::new(Vector3::from([0, 0, 0]), self.dimension.into()));
     }
 
     /// Effectively increases the leaf dimension of the `Octree` and simplifies where possible.
     ///
-    /// Moves the leaf dimension up a level, and all leaves are formed by the most common data of their
+    /// Moves the leaf dimension down a level, and all leaves are formed by the most common data of their
     /// original children.
     ///
     /// # Example
