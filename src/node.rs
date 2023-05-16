@@ -3,10 +3,7 @@ use crate::{Error, Vector3};
 use hashbrown::HashMap;
 
 use alloc::{boxed::Box, collections::VecDeque, vec::Vec};
-use core::{
-    hash::Hash,
-    ops::Deref,
-};
+use core::{hash::Hash, ops::Deref};
 
 pub(crate) const OCTREE_CHILDREN: usize = 8;
 
@@ -105,7 +102,7 @@ struct ChildInfo {
 }
 
 #[derive(Default, Clone)]
-pub(crate) struct Node<T>
+pub struct Node<T>
 where
     T: Default + Eq + PartialEq + Clone + Copy + Hash,
 {
@@ -393,20 +390,19 @@ where
     fn is_leaf(&self) -> bool {
         matches!(self.ty, NodeType::Leaf(_))
     }
-}
 
-use bendy::encoding::{Error as BencodeError, SingleItemEncoder, ToBencode};
-impl<T> ToBencode for Node<T>
-where
-    T: Default + Clone + Eq + PartialEq + Copy + Hash + ToBencode + FromBencode,
-{
-    const MAX_DEPTH: usize = 4;
-    fn encode(&self, encoder: SingleItemEncoder) -> Result<(), BencodeError> {
-        //Collect al Nodes into an array for serialization
-        let mut all_nodes = Vec::<(&Node<T>, [Option<usize>; OCTREE_CHILDREN])>::new(); // Node reference and the index of each child in the same array
+    /// Compiles an array of references containing each child Node with an index of each child
+    ///
+    /// If the child index value is 0, that would mean that it has the root node as a child, so it is used to signal that the Node has no
+    /// child at that index instead
+    pub fn serialize(&self) -> Vec<(&Node<T>, [usize; OCTREE_CHILDREN])> {
+        let max_elements = OCTREE_CHILDREN.pow(self.dimension.ilog2());
+
+        //Collect all Nodes into an array for serialization
+        let mut all_nodes = Vec::<(&Node<T>, [usize; OCTREE_CHILDREN])>::with_capacity(max_elements); // Node reference and the index of each child in the same array
         let mut nodes_to_process = VecDeque::new(); // Index values of unprocessed Nodes in `all_nodes`
         nodes_to_process.push_front(0);
-        all_nodes.push((self, [None; OCTREE_CHILDREN]));
+        all_nodes.push((self, [0; OCTREE_CHILDREN]));
         while 0 < nodes_to_process.len() {
             let current_node_index = nodes_to_process.remove(0).unwrap();
             assert!(
@@ -418,14 +414,68 @@ where
             for i in 0..OCTREE_CHILDREN {
                 if let Some(c) = current_node.children[i].as_ref() {
                     //If the yet unprocessed Node has a child; push it to the end of the `all_nodes` vector, and mark it to be processed
-                    indexed_children[i] = Some(all_nodes.len());
+                    indexed_children[i] = all_nodes.len();
                     nodes_to_process.push_back(all_nodes.len());
-                    all_nodes.push((c, [None; OCTREE_CHILDREN]));
+                    all_nodes.push((c, [0; OCTREE_CHILDREN]));
                 }
             }
             all_nodes[current_node_index] = (current_node, indexed_children);
         }
+        all_nodes
+    }
 
+    /// Builds up the Node structure from the serialized array of children
+    ///
+    /// If the child index value is 0, that would mean that it has the root node as a child, so it is used to signal that the Node has no
+    /// child at that index instead
+    pub fn deserialize(mut all_nodes: Vec<(Option<Node<T>>, [usize; OCTREE_CHILDREN])>) -> Self {
+        let mut stack: VecDeque<(usize, usize, usize)> = VecDeque::new(); // Index of the Node, and index of its parent(who put it on the stack) along with the index of the child the Node is(parent's child index)
+        stack.push_back((0, 0, 0));
+
+        while 0 < stack.len() {
+            let (current_node, current_node_parent, parent_child_index) = stack.back().unwrap();
+            let mut current_child_index = 0; //Also contains the index of the child in which the helper index values and the Node<T>.children contents differ
+            for child_index in 0..OCTREE_CHILDREN {
+                if all_nodes[*current_node].1[child_index] == 0 //0 means it has no children 
+                            || all_nodes[*current_node].0.as_ref().unwrap().children[child_index].is_some()
+                {
+                    current_child_index += 1;
+                } else {
+                    break;
+                }
+            }
+            if current_child_index < OCTREE_CHILDREN {
+                stack.push_back((
+                    all_nodes[*current_node].1[current_child_index],
+                    *current_node,
+                    current_child_index,
+                ));
+            } else {
+                //children are ready! let's push this item into a Box, add the dependency to its parent and remove it from stack!
+                //except for the root Node
+                if 0 != *current_node {
+                    // move box into its parent Node
+                    let node = std::mem::replace(&mut all_nodes[*current_node].0, None).unwrap(); //Move Node into a box
+                    all_nodes[*current_node_parent].0.as_mut().unwrap().children[*parent_child_index] =
+                        Some(Box::new(node));
+                }
+                stack.pop_back();
+            }
+        }
+        // Return the root Node
+        std::mem::replace(&mut all_nodes[0].0, None).unwrap()
+    }
+}
+
+use bendy::encoding::{Error as BencodeError, SingleItemEncoder, ToBencode};
+impl<T> ToBencode for Node<T>
+where
+    T: Default + Clone + Eq + PartialEq + Copy + Hash + ToBencode + FromBencode,
+{
+    const MAX_DEPTH: usize = 4;
+    fn encode(&self, encoder: SingleItemEncoder) -> Result<(), BencodeError> {
+        //Collect al Nodes into an array for serialization
+        let all_nodes = self.serialize();
         // println!("Encode:");
         // let mut n_i = 0;
         // for n in all_nodes.iter() {
@@ -460,23 +510,25 @@ where
                         e.emit(d)?
                     }
                 }
-
-                //emit min_position
-                e.emit_int(node_ref.min_position.x)?;
-                e.emit_int(node_ref.min_position.y)?;
-                e.emit_int(node_ref.min_position.z)?;
-
-                //emit dimension
-                e.emit_int(node_ref.dimension)?;
-
-                //emit Node child array index values
-                e.emit_list(|e2| {
-                    // the value 0 can be used safely here, becaue the root node is at index 0; and it's child for noone
-                    for i in 0..OCTREE_CHILDREN {
-                        e2.emit_int(node_children[i].unwrap_or(0))?;
-                    }
-                    Ok(())
-                })?;
+                e.emit_bytes(
+                    &[
+                        node_ref.min_position.x,
+                        node_ref.min_position.y,
+                        node_ref.min_position.z,
+                        node_ref.dimension,
+                        node_children[0] as u32,
+                        node_children[1] as u32,
+                        node_children[2] as u32,
+                        node_children[3] as u32,
+                        node_children[4] as u32,
+                        node_children[5] as u32,
+                        node_children[6] as u32,
+                        node_children[7] as u32,
+                    ]
+                    .iter()
+                    .flat_map(|&x| u32::to_be_bytes(x))
+                    .collect::<Vec<u8>>(),
+                )?;
             }
             Ok(())
         })
@@ -492,7 +544,6 @@ where
         //Read in serialized array containing Node information
         match data {
             Object::List(mut list) => {
-                let mut all_nodes = Vec::<(Option<Node<T>>, [Option<usize>; OCTREE_CHILDREN])>::new(); // The actual Node to be built and the helper index values for its children
                 let node_count = match list.next_object()?.unwrap() {
                     Object::Integer(i) => Ok(i.parse().unwrap()),
                     _ => Err(bendy::decoding::Error::unexpected_token(
@@ -500,8 +551,10 @@ where
                         "Something else",
                     )),
                 }?;
-
-                for _ in 0..node_count {
+                // let mut all_nodes = Vec::<(Option<Node<T>>, [usize; OCTREE_CHILDREN])>::with_capacity(node_count); // The actual Node to be built and the helper index values for its children
+                let mut all_nodes: Vec<(Option<Node<T>>, [usize; OCTREE_CHILDREN])> =
+                    vec![(None, [0; OCTREE_CHILDREN]); node_count];
+                for node_index in 0..node_count {
                     use std::string::String;
                     let mut is_leaf = false;
                     let mut ty = match String::decode_bencode_object(list.next_object()?.unwrap())?.as_str() {
@@ -518,59 +571,44 @@ where
                     if is_leaf {
                         ty = NodeType::<T>::Leaf(T::decode_bencode_object(list.next_object()?.unwrap())?)
                     }
-                    let x = match list.next_object()?.unwrap() {
-                        Object::Integer(i) => Ok(i.parse::<u32>().unwrap()),
+                    match list.next_object()?.unwrap() {
+                        Object::Bytes(bytes) => {
+                            assert!(bytes.len() == (12 * 4)); //12 u32 numbers
+                            let min_position = Vector3::<u32> {
+                                x: u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
+                                y: u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
+                                z: u32::from_be_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]),
+                            };
+                            let dimension = u32::from_be_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]);
+                            let children: [usize; OCTREE_CHILDREN] = [
+                                u32::from_be_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]) as usize,
+                                u32::from_be_bytes([bytes[20], bytes[21], bytes[22], bytes[23]]) as usize,
+                                u32::from_be_bytes([bytes[24], bytes[25], bytes[26], bytes[27]]) as usize,
+                                u32::from_be_bytes([bytes[28], bytes[29], bytes[30], bytes[31]]) as usize,
+                                u32::from_be_bytes([bytes[32], bytes[33], bytes[34], bytes[35]]) as usize,
+                                u32::from_be_bytes([bytes[36], bytes[37], bytes[38], bytes[39]]) as usize,
+                                u32::from_be_bytes([bytes[40], bytes[41], bytes[42], bytes[43]]) as usize,
+                                u32::from_be_bytes([bytes[44], bytes[45], bytes[46], bytes[47]]) as usize,
+                            ];
+
+                            all_nodes[node_index] = (
+                                Some(Node::<T> {
+                                    ty,
+                                    min_position,
+                                    dimension,
+                                    ..Default::default()
+                                }),
+                                children,
+                            );
+                            Ok(())
+                        }
                         _ => Err(bendy::decoding::Error::unexpected_token(
                             "Integer for Node min_position x",
                             "not Integer",
                         )),
                     }?;
-                    let y = match list.next_object()?.unwrap() {
-                        Object::Integer(i) => Ok(i.parse::<u32>().unwrap()),
-                        _ => Err(bendy::decoding::Error::unexpected_token(
-                            "Integer for Node min_position y",
-                            "not Integer",
-                        )),
-                    }?;
-                    let z = match list.next_object()?.unwrap() {
-                        Object::Integer(i) => Ok(i.parse::<u32>().unwrap()),
-                        _ => Err(bendy::decoding::Error::unexpected_token(
-                            "Integer for Node min_position z",
-                            "not Integer",
-                        )),
-                    }?;
-                    let min_position = Vector3::<u32> { x, y, z };
-                    let dimension = match list.next_object()?.unwrap() {
-                        Object::Integer(i) => Ok(i.parse::<u32>().unwrap()),
-                        _ => Err(bendy::decoding::Error::unexpected_token(
-                            "Integer for Node dimension",
-                            "not Integer",
-                        )),
-                    }?;
-                    let mut children: [Option<usize>; OCTREE_CHILDREN] = [None; OCTREE_CHILDREN];
-                    match list.next_object()?.unwrap() {
-                        Object::List(mut child_list) => Ok(for i in 0..OCTREE_CHILDREN {
-                            children[i] = match child_list.next_object()?.unwrap() {
-                                Object::Integer(i) => Ok(Some(i.parse::<usize>().unwrap())),
-                                _ => Err(bendy::decoding::Error::unexpected_token("List", "not List")),
-                            }?;
-                            if children[i].unwrap() == 0 {
-                                // 0 index value represents None in the helper index structure
-                                children[i] = None;
-                            }
-                        }),
-                        _ => Err(bendy::decoding::Error::unexpected_token("List", "not List")),
-                    }?;
-                    all_nodes.push((
-                        Some(Node::<T> {
-                            ty,
-                            min_position,
-                            dimension,
-                            ..Default::default()
-                        }),
-                        children,
-                    ));
                 }
+                Ok(Node::<T>::deserialize(all_nodes))
 
                 // println!("Decode:");
                 // let mut n_i = 0;
@@ -598,42 +636,6 @@ where
                 // }
 
                 //Construct the tree structure from the serialized array
-                let mut stack: VecDeque<(usize, usize, usize)> = VecDeque::new(); // Index of the Node, and index of its parent(who put it on the stack) along with the index of the child the Node is(parent's child index)
-                stack.push_back((0, 0, 0));
-
-                while 0 < stack.len() {
-                    let (current_node, current_node_parent, parent_child_index) = stack.back().unwrap();
-                    let mut current_child_index = 0; //Also contains the index of the child in which the helper index values and the Node<T>.children contents differ
-                    for child_index in 0..OCTREE_CHILDREN {
-                        if all_nodes[*current_node].1[child_index].is_none() //If the helper inde value
-                            || all_nodes[*current_node].0.as_ref().unwrap().children[child_index].is_some()
-                        {
-                            current_child_index += 1;
-                        } else {
-                            break;
-                        }
-                    }
-                    if current_child_index < OCTREE_CHILDREN {
-                        stack.push_back((
-                            all_nodes[*current_node].1[current_child_index].unwrap(),
-                            *current_node,
-                            current_child_index,
-                        ));
-                    } else {
-                        //children are ready! let's push this item into a Box, add the dependency to its parent and remove it from stack!
-                        //except for the root Node
-                        if 0 != *current_node {
-                            // move box into its parent Node
-                            let node = std::mem::replace(&mut all_nodes[*current_node].0, None).unwrap(); //Move Node into a box
-                            all_nodes[*current_node_parent].0.as_mut().unwrap().children[*parent_child_index] =
-                                Some(Box::new(node));
-                        }
-                        stack.pop_back();
-                    }
-                }
-
-                // Return the root Node
-                Ok(std::mem::replace(&mut all_nodes[0].0, None).unwrap())
             }
             _ => Err(bendy::decoding::Error::unexpected_token("List", "not List")),
         }

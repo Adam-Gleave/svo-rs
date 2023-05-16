@@ -18,6 +18,7 @@ where
     root: Box<Node<T>>,
 }
 
+use std::vec::Vec;
 impl<T> Octree<T>
 where
     T: Default + Clone + Eq + PartialEq + Copy + Hash + ToBencode + FromBencode,
@@ -278,6 +279,15 @@ where
     pub fn simplify(&mut self) -> bool{
         self.root.simplify_recursive()
     }
+
+    pub fn serialize(&self)-> Vec<(&Node<T>, [usize; crate::node::OCTREE_CHILDREN])>{
+        self.root.serialize()
+    }
+
+    pub fn deserialize(&mut self, all_nodes: Vec<(Option<Node<T>>, [usize; crate::node::OCTREE_CHILDREN])>){
+        self.root = Box::new(Node::<T>::deserialize(all_nodes));
+    }
+
 }
 
 use bendy::encoding::{SingleItemEncoder, ToBencode};
