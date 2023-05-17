@@ -7,7 +7,8 @@ edition = "2018"
 itertools = { version = "0.10", default-features = false }
 hashbrown = { version = "0.11", default-features = false }
 micromath = { version = "2.0", optional = true }
-bendy = { version = "0.3.3" }
+#bendy = { version = "0.3.3" }
+bendy = { git = "https://github.com/davids91/bendy.git" }
 
 [features]
 default = [ "std" ]
