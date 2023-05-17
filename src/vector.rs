@@ -10,12 +10,28 @@ where
     pub z: T,
 }
 
-impl<T: Mul<Output = T> + Copy> Vector3<T> {
+impl<T: Mul<Output = T> + Add<Output = T> + Copy> Vector3<T> {
     pub(crate) fn component_mul(self, other: &Self) -> Self {
         Self {
             x: self.x * other.x,
             y: self.y * other.y,
             z: self.z * other.z,
+        }
+    }
+
+    pub(crate) fn scl(self, rhs: T) -> Self {
+        Self {
+            x: self.x * rhs,
+            y: self.y * rhs,
+            z: self.z * rhs,
+        }
+    }
+
+    pub(crate) fn offset(self, rhs: T) -> Self {
+        Self {
+            x: self.x + rhs,
+            y: self.y + rhs,
+            z: self.z + rhs,
         }
     }
 }

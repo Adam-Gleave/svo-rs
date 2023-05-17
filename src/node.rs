@@ -97,7 +97,6 @@ impl<T> Default for NodeType<T> {
 
 struct ChildInfo {
     dimension: u32,
-    dimension_3d: Vector3<u32>,
     octant: Octant,
 }
 
@@ -149,7 +148,6 @@ where
 
         let ChildInfo {
             dimension: child_dimension,
-            dimension_3d,
             octant,
         } = self.child_info(position).unwrap();
 
@@ -158,7 +156,7 @@ where
                 if i != octant as usize {
                     let new_octant = Octant::from(i);
                     let mut new_node =
-                        Node::<T>::new(self.child_min_position(dimension_3d, new_octant), child_dimension);
+                        Node::<T>::new(self.child_min_position(child_dimension, new_octant), child_dimension);
                     new_node.ty = NodeType::Leaf(*self.leaf_data().unwrap());
                     self.children[new_octant as usize] = Some(Box::new(new_node));
                 }
@@ -172,7 +170,7 @@ where
                 .unwrap();
         } else {
             let mut node = Box::new(Node::<T>::new(
-                self.child_min_position(dimension_3d, octant),
+                self.child_min_position(child_dimension, octant),
                 child_dimension,
             ));
             node.insert(position, min_dimension, do_simplify, data).unwrap();
@@ -188,11 +186,7 @@ where
     /// Removes the `Node` at the given position, if possible.
     pub(crate) fn clear(&mut self, position: Vector3<u32>, min_dimension: u32) -> Result<(), Error> {
         if self.contains(position) {
-            let ChildInfo {
-                dimension,
-                dimension_3d: _,
-                octant,
-            } = self.child_info(position).unwrap();
+            let ChildInfo { dimension, octant } = self.child_info(position).unwrap();
 
             if self.is_leaf() && dimension == min_dimension {
                 for i in 0..OCTREE_CHILDREN {
@@ -229,11 +223,7 @@ where
         return match &self.ty {
             NodeType::Leaf(data) => Some(data),
             _ => {
-                let ChildInfo {
-                    dimension: _,
-                    dimension_3d: _,
-                    octant,
-                } = self.child_info(position).unwrap();
+                let octant = self.octant_at_child(position).unwrap();
                 match &self.children[octant as usize] {
                     Some(child) => child.get(position),
                     _ => None,
@@ -360,25 +350,29 @@ where
         }
     }
 
-    fn child_info(&self, position: Vector3<u32>) -> Option<ChildInfo> {
-        if self.contains(position) {
-            let dimension = self.dimension / 2;
-            let dimension_3d = Vector3::from([dimension, dimension, dimension]);
-            let midpoint = self.min_position + dimension_3d;
-            let octant = Octant::vector_diff(midpoint, position);
 
-            Some(ChildInfo {
-                dimension,
-                dimension_3d,
-                octant,
-            })
+    fn octant_at_child(&self, position: Vector3<u32>) -> Option<Octant> {
+        if self.contains(position) {
+            let midpoint = self.min_position.offset(self.dimension / 2);
+            Some(Octant::vector_diff(midpoint, position))
         } else {
             None
         }
     }
 
-    fn child_min_position(&self, dimension_3d: Vector3<u32>, octant: Octant) -> Vector3<u32> {
-        self.min_position + dimension_3d.component_mul(&octant.offset())
+    fn child_info(&self, position: Vector3<u32>) -> Option<ChildInfo> {
+        if self.contains(position) {
+            let dimension = self.dimension / 2;
+            let midpoint = self.min_position.offset(dimension);
+            let octant = Octant::vector_diff(midpoint, position);
+            Some(ChildInfo { dimension, octant })
+        } else {
+            None
+        }
+    }
+
+    fn child_min_position(&self, dimension: u32, octant: Octant) -> Vector3<u32> {
+        self.min_position + octant.offset().scl(dimension)
     }
 
     fn child_count(&self) -> usize {
@@ -551,7 +545,6 @@ where
                         "Something else",
                     )),
                 }?;
-                // let mut all_nodes = Vec::<(Option<Node<T>>, [usize; OCTREE_CHILDREN])>::with_capacity(node_count); // The actual Node to be built and the helper index values for its children
                 let mut all_nodes: Vec<(Option<Node<T>>, [usize; OCTREE_CHILDREN])> =
                     vec![(None, [0; OCTREE_CHILDREN]); node_count];
                 for node_index in 0..node_count {
