@@ -1,6 +1,6 @@
 use core::ops::{Add, Mul};
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct Vector3<T>
 where
     T: Copy,
@@ -10,12 +10,28 @@ where
     pub z: T,
 }
 
-impl<T: Mul<Output = T> + Copy> Vector3<T> {
+impl<T: Mul<Output = T> + Add<Output = T> + Copy> Vector3<T> {
     pub(crate) fn component_mul(self, other: &Self) -> Self {
         Self {
             x: self.x * other.x,
             y: self.y * other.y,
             z: self.z * other.z,
+        }
+    }
+
+    pub(crate) fn scl(self, rhs: T) -> Self {
+        Self {
+            x: self.x * rhs,
+            y: self.y * rhs,
+            z: self.z * rhs,
+        }
+    }
+
+    pub(crate) fn offset(self, rhs: T) -> Self {
+        Self {
+            x: self.x + rhs,
+            y: self.y + rhs,
+            z: self.z + rhs,
         }
     }
 }
@@ -39,5 +55,11 @@ impl<T: Copy> From<[T; 3]> for Vector3<T> {
             y: v[1],
             z: v[2],
         }
+    }
+}
+
+impl<T: Copy> Into<[T; 3]> for Vector3<T> {
+    fn into(self) -> [T; 3] {
+        [self.x, self.y, self.z]
     }
 }
